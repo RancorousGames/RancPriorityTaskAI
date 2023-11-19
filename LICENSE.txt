@@ -1,0 +1,15 @@
+Copyright (c) 2023 Rancorous Games
+
+Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to use, copy, modify, merge, publish, and distribute copies of the Software, subject to the following conditions:
+
+1. Non-Commercial Use:
+   The Software may be used for non-commercial purposes without restriction. "Non-commercial" means not primarily intended for or directed towards commercial advantage or monetary compensation.
+
+2. Commercial Use:
+   Use of the Software in any commercial capacity is strictly prohibited without prior written permission from Rancorous Games. To inquire about obtaining permission for commercial use, please contact Rancorous Games directly.
+
+3. Redistribution:
+   Redistribution of the Software is allowed under the condition that this license and the above copyright notice are included in all copies or substantial portions of the Software.
+
+4. Modifications:
+   Modifications to the Software are allowed under the condition that modified files are clearly marked as such, and they are not misrepresented as being the original software.

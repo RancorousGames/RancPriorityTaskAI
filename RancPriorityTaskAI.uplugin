@@ -1,0 +1,24 @@
+{
+	"FileVersion": 3,
+	"Version": 1,
+	"VersionName": "0.5",
+	"FriendlyName": "Ranc Priority Task AI",
+	"Description": "An advanced and optimized task and priority based AI system",
+	"Category": "AI",
+	"CreatedBy": "Rancorous Games",
+	"CreatedByURL": "https://twitter.com/RancorousGames",
+	"DocsURL": "https://miro.com/app/board/uXjVNOGEHRU=/?share_link_id=758389896638",
+	"MarketplaceURL": "",
+	"SupportURL": "",
+	"CanContainContent": true,
+	"IsBetaVersion": false,
+	"IsExperimentalVersion": false,
+	"Installed": false,
+	"Modules": [
+		{
+			"Name": "RancPriorityTaskAI",
+			"Type": "Runtime",
+			"LoadingPhase": "PreDefault"
+		}
+	]
+}
