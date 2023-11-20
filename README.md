@@ -24,3 +24,10 @@ Place it in the Plugins folder next to this plugin.
 ## Documentation
 
 See Miro Board: https://miro.com/app/board/uXjVNOGEHRU=/?share_link_id=992820492998
+
+## Packaging
+
+To make the plugin usable in blueprint only projects we need to package it.
+This is done through the Plugins settings in the engine with a C++ project that has the plugin installed.
+Because this plugin has a dependency on Rancorous Utilities plugin you need to have that plugin a place where the packaging tool can find it.
+The only way to do that is to place the *packaged* Rancorous Utilities plugin inside \Engine\Plugins\Marketplace.

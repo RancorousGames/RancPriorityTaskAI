@@ -18,7 +18,18 @@
 		{
 			"Name": "RancPriorityTaskAI",
 			"Type": "Runtime",
-			"LoadingPhase": "PreDefault"
+			"LoadingPhase": "PreDefault",
+			"PlatformAllowList": [
+				"Win64"
+			],
+			"PlatformDenyList": [
+				"Android"
+			]
 		}
-	]
+	],
+	"Plugins": [
+	{
+		"Name": "RancUtilities",
+		"Enabled": true
+	}]
 }

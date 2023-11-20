@@ -10,15 +10,15 @@ struct FRAITaskInvokeArguments
 {
 	GENERATED_BODY()
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Invoke")
 	AActor* TargetActor = nullptr;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Invoke")
 	FVector TargetLocation = FVector::ZeroVector;
 	
-	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Invoke")
 	bool ContinueUntilSuccess = true;
 	
-	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Invoke")
 	FString CustomInstruction = FString("");
 };
