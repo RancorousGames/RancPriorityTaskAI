@@ -1,14 +1,17 @@
 ﻿#pragma once
 
-#include "RAIController.h"
+// This was an attempt at making a ai move to that would automatically do BeginWait/DoneWaiting
+
+/*#include "RAIController.h"
 #include "Kismet/BlueprintFunctionLibrary.h"
 #include "AIController.h"
 #include "LatentActions.h"
 #include "Tasks/AITask_MoveTo.h"
 #include "RAIBlueprintLibrary.generated.h"
 
+
 struct FLatentActionInfo;
-/*
+
 class FMoveToLatentAction : public FPendingLatentAction
 {
 public:
@@ -34,7 +37,7 @@ private:
 	{
 		bIsComplete = true;
 	}
-};*/
+};
 
 
 UCLASS()
@@ -57,4 +60,4 @@ public:
 		return nullptr;
 	}
 	
-};
+};*/

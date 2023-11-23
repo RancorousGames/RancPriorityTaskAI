@@ -27,6 +27,7 @@ public:
 protected:
 	virtual void BeginPlay() override;
 	
+	virtual void OnPossess(APawn* InPawn) override;
 public:
 	
 //*************************************************************************
@@ -41,7 +42,6 @@ public:
 	 * Set to false if you dont want input or want to call the manager sensory input methods yourself */
 	UPROPERTY(EditAnywhere,BlueprintReadOnly,Transient,Category = Configuration)
 	bool AutoHandleSensoryInput = true;
-
 	
 	
 //*************************************************************************
@@ -62,8 +62,9 @@ public:
 //*************************************************************************
 	
 	/*  Add a thought to Thoughts */
-	UFUNCTION(BlueprintCallable, Category = Basic)
+	UFUNCTION(BlueprintCallable, Category = RAI)
 	void TraceThought(FString Thought);
+
 
 private:
 	
@@ -72,25 +73,5 @@ private:
 
 	UFUNCTION()
 	void OnPerceptionUpdated(AActor* Actor, FAIStimulus Stimulus);
-	
-/////////////////////// Below are stuff that i dont know if i want to keep //////////////////////////
-public:
-	/*
-	Actor location is typically the root of the objects. 
-	Pawns will have their root at the feet, but we want to focus at a point above the
-	feet, like a chest or face.  
-
-	To do this, I override GetFocalPointOnActor(const AActor* Actor) const
-	If the given actor is a APawn, then the focal point will be
-	
-	ActorLocation + FVector(0.0f,0.0f,FocusEyeHeight)*ActorScale.Z
-
-	Otherwise, I call the super function
-	*/
-	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = FocusSettings)
-	float FocusEyeHeight = 80.0f;
-
-	FVector GetFocalPointOnActor(const AActor* Actor) const override;
-
 	
 };

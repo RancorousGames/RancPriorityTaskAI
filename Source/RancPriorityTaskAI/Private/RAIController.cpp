@@ -1,6 +1,5 @@
 #include "RAIController.h"
 #include "RAIManagerComponent.h"
-#include "Kismet/KismetMathLibrary.h"
 #include "Perception/AIPerceptionComponent.h"
 
 
@@ -14,8 +13,7 @@ ARAIController::ARAIController()
 inline void ARAIController::BeginPlay()
 {
 	Super::BeginPlay();
-	ManagerComponent = FindComponentByClass<URAIManagerComponent>();
-
+	
 	if (AutoHandleSensoryInput)
 	{
 		AIPerceptionComponent = GetAIPerceptionComponent();
@@ -33,18 +31,6 @@ inline void ARAIController::BeginPlay()
 	}
 }
 
-
-
-FVector ARAIController::GetFocalPointOnActor(const AActor* Actor) const
-{
-    if( Actor && UKismetMathLibrary::ClassIsChildOf(Actor->GetClass(),APawn::StaticClass()) )
-    {
-        return (Actor->GetActorLocation() + FVector(0.0f,0.0f,FocusEyeHeight)* (Actor->GetActorScale() ).Z  );
-    }
-    
-    return Super::GetFocalPointOnActor(Actor);
-}
-
 void ARAIController::TraceThought(FString Thought)
 {
    Thoughts.Add(Thought);
@@ -58,6 +44,18 @@ void ARAIController::TraceThought(FString Thought)
 		// Remove the older half of thoughts
 		Thoughts.RemoveAt(0, ThoughtsToRemove);
 	}
+}
+
+void ARAIController::OnPossess(APawn* InPawn)
+{
+	Super::OnPossess(InPawn);
+	
+	if (!ManagerComponent)
+	{
+		ManagerComponent = FindComponentByClass<URAIManagerComponent>();
+	}
+
+	ManagerComponent->Initialize(this, InPawn);
 }
 
 void ARAIController::OnPerceptionUpdated(AActor* Actor, FAIStimulus Stimulus)

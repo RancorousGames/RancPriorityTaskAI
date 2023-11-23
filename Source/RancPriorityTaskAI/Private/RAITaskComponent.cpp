@@ -4,7 +4,6 @@
 #include "TimerManager.h"
 #include "Math/UnrealMathUtility.h"
 
-
 // Sets default values for this component's properties
 URAITaskComponent::URAITaskComponent()
 {
@@ -17,9 +16,7 @@ URAITaskComponent::URAITaskComponent()
 void URAITaskComponent::BeginPlay()
 {
 	Super::BeginPlay();
-
-	ManagerComponent = GetOwner()->FindComponentByClass<URAIManagerComponent>();
-
+	
 	InterruptType = DefaultInterruptType;
 
 	// Validate configuration values.
@@ -31,6 +28,7 @@ void URAITaskComponent::BeginPlay()
 
 void URAITaskComponent::BeginTask_Implementation(const FRAITaskInvokeArguments& InvokeArguments)
 {
+	OwnerController->TraceThought(FString("Beginning: ") + GetFName().ToString());
 	WorldTimeBegun = GetWorld()->GetTimeSeconds();
 	IsTaskActive = true;
 	IsWaiting = false;
@@ -38,8 +36,14 @@ void URAITaskComponent::BeginTask_Implementation(const FRAITaskInvokeArguments& 
 	CheckForInfLoop();
 }
 
-void URAITaskComponent::EndTask_Implementation(bool Success)
+void URAITaskComponent::EndTask_Implementation(bool Success, bool InterruptParentInvokers)
 {
+	if (DebugLoggingEnabled)
+	{
+		UE_LOG(LogTemp, Display, TEXT("Task %s ended with success %d"), *GetClass()->GetName(), Success);
+	}
+	
+	ManagerComponent->TaskEnded(this);
 	WorldTimeEnd = GetWorld()->GetTimeSeconds();
 	IsTaskActive = false;
 	IsWaiting = false;
@@ -49,13 +53,27 @@ void URAITaskComponent::EndTask_Implementation(bool Success)
 	if (ParentInvokingTask != nullptr)
 	{
 		ParentInvokingTask->IsWaiting = false;
-		auto* _invokingTask = ParentInvokingTask;
+		auto* CurrentParentInvokingTask = ParentInvokingTask;
 		ParentInvokingTask = nullptr;
 
-		if (Success)
+		if (!InterruptParentInvokers)
 		{
-			_invokingTask->CheckForInfLoop();
-			_invokingTask->OnInvokedTaskCompleted();
+			CurrentParentInvokingTask->CheckForInfLoop();
+
+			ManagerComponent->ReturnToInvokingTask(this, CurrentParentInvokingTask, Success);
+		}
+		else // Interrupt all Parent Invokers
+		{
+			if (DebugLoggingEnabled)
+			{
+				UE_LOG(LogTemp, Display, TEXT("Task %s interrupted, interrupting parent tasks"), *GetClass()->GetName());
+			}
+				
+			while(CurrentParentInvokingTask != nullptr)
+			{
+				CurrentParentInvokingTask->EndTask(false);
+				CurrentParentInvokingTask = CurrentParentInvokingTask->ParentInvokingTask;
+			}
 		}
 	}
 
@@ -83,6 +101,12 @@ bool URAITaskComponent::IsTaskReady()
 	return false;
 }
 
+void URAITaskComponent::SetPriority(float NewPriority)
+{
+	Priority = NewPriority;
+}
+
+
 bool URAITaskComponent::CheckForInfLoop()
 {
 	// If we get more than MaxTaskLoopCount calls within LoopCountDetectionPeriod then we call it an infinite loop
@@ -98,6 +122,11 @@ bool URAITaskComponent::CheckForInfLoop()
 	CurrentTaskLoopCount++;
 	if (CurrentTaskLoopCount >= MaxTaskLoopCount)
 	{
+		 if (DebugLoggingEnabled)
+		 {
+			 UE_LOG(LogTemp, Warning, TEXT("Task %s Infinite loop detection"), *GetClass()->GetName());
+		 }
+		
 		if (Cooldown <= 0.f)
 		{
 			// go through each parent and set cooldown
@@ -122,11 +151,50 @@ void URAITaskComponent::OnPerceptionStimulus_Implementation(AActor* actor, FAISt
 {
 }
 
+float URAITaskComponent::GetPriority() const
+{
+	if (!IsPrimaryTask)
+	{
+		if (const URAITaskComponent* AncestorTask = GetOldestInvokingAncestor())
+		{
+			return AncestorTask->Priority;
+		}
+	}
+	
+	return Priority;
+}
+
 void URAITaskComponent::Restart()
 {
+	if (DebugLoggingEnabled)
+	{
+		UE_LOG(LogTemp, Display, TEXT("Task %s restarting"), *GetClass()->GetName());
+	}
+	
 	if (LoopPenaltyApplied || CheckForInfLoop())
 	{
-		EndTask();
+		// If this task has been detected as in an infinite loop, we will respect cooldown on Restart
+		if (IsTaskReady())
+		{
+			if (DebugLoggingEnabled)
+			{
+				UE_LOG(LogTemp, Display, TEXT("Task %s delayed restart ready"), *GetClass()->GetName());
+			}
+			
+			InterruptType = LoopPenaltySavedInterruptType;
+			BeginTask(InvokeArgs);
+		}
+		else
+		{
+			if (DebugLoggingEnabled)
+			{
+				UE_LOG(LogTemp, Display, TEXT("Task %s has penalty so delaying Restart"), *GetClass()->GetName());
+			}
+			
+			LoopPenaltySavedInterruptType = InterruptType;
+			GetWorld()->GetTimerManager().SetTimer(RestartTimerHandle, this, &URAITaskComponent::Restart, Cooldown, false);
+			InterruptType = ERAIInterruptionType::Never;
+		}
 	}
 	else
 	{
@@ -151,6 +219,17 @@ ERAIField URAITaskComponent::GetSimulationField()
 	return ERAIField::NearField;
 }
 
+URAITaskComponent* URAITaskComponent::GetOldestInvokingAncestor() const
+{
+	URAITaskComponent* CurrentParentInvokingTask = ParentInvokingTask;
+	while(CurrentParentInvokingTask && CurrentParentInvokingTask->ParentInvokingTask != nullptr)
+	{
+		CurrentParentInvokingTask = CurrentParentInvokingTask->ParentInvokingTask;
+	}
+
+	return CurrentParentInvokingTask;
+}
+
 void URAITaskComponent::BeginWaiting(double MaxWaitTime, bool OverrideInterruptionType, ERAIInterruptionType InterruptTypeWhileWaiting)
 {
 	// Set the task to waiting state
@@ -172,9 +251,19 @@ void URAITaskComponent::BeginWaiting(double MaxWaitTime, bool OverrideInterrupti
 void URAITaskComponent::DoneWaiting(ERAIInterruptionType InterruptTypeToReturnTo, EDoneWaitingExecutionStates& ReturnBranch)
 {
 	const bool WasInterrupted = !IsTaskActive;
+	
+	if (DebugLoggingEnabled)
+	{
+		UE_LOG(LogTemp, Display, TEXT("Task %s done waiting"), *GetClass()->GetName());
+	}
 
 	if (WasInterrupted)
 	{
+		if (DebugLoggingEnabled)
+		{
+			UE_LOG(LogTemp, Display, TEXT("Task %s was interrupted while waiting"), *GetClass()->GetName());
+		}
+		
 		ReturnBranch = EDoneWaitingExecutionStates::TaskEnded;
 	}
 	else

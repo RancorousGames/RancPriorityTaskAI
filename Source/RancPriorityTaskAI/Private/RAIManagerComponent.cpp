@@ -6,6 +6,8 @@
 #include "GameFramework/Pawn.h"
 #include "Runtime/Engine/Public/DrawDebugHelpers.h"
 #include "RAIController.h"
+#include "GameFramework/Character.h"
+#include "RancUtilityLibrary.h"
 
 URAIManagerComponent::URAIManagerComponent()
 {
@@ -16,35 +18,52 @@ URAIManagerComponent::URAIManagerComponent()
 void URAIManagerComponent::BeginPlay()
 {
 	Super::BeginPlay();
-	PrimaryComponentTick.bCanEverTick = false;
 }
 
-void URAIManagerComponent::Initialize()
+void URAIManagerComponent::Initialize(ARAIController* Controller, APawn* Pawn)
 {
-	OwningController = Cast<ARAIController>(GetOwner());
-
-	if (!OwningController)
+	if (OwningController == nullptr || Character == nullptr)
 	{
-		UE_LOG(LogTemp, Error, TEXT("RAIManagerComponent must be attached to an RAIController"))
-	}
-	else
-	{
-		ControlledPawn = OwningController->GetPawn();
-		OwningController->GetComponents<URAITaskComponent>(AllTasks, false);
-	}
+		OwningController = Controller;
 
-
-	for (URAITaskComponent* TaskComponent : AllTasks)
-	{
-		UClass* TaskClass = TaskComponent->GetClass();
-		TaskTypeToInstanceMap.Add(TaskClass, TaskComponent);
-
-		if (TaskComponent->IsPrimaryTask)
+		if (!OwningController)
 		{
-			PrimaryTasks.Add(TaskComponent);
+			UE_LOG(LogTemp, Error, TEXT("RAIManagerComponent must be attached to an RAIController"))
+		}
+		else
+		{
+			Character = Cast<ACharacter>(Pawn);
+			// error if controlledpawn null
+			if (!Character)
+			{
+				UE_LOG(LogTemp, Error,
+				       TEXT("Tried to initialize RAIManagerComponent but the controlled pawn was null"));
+			}
+
+			OwningController->GetComponents<URAITaskComponent>(AllTasks, false);
 		}
 
-		TaskComponent->OwnerController = OwningController;
+		if (DebugLoggingEnabled)
+		{
+			UE_LOG(LogTemp, Display, TEXT("RAIManagerComponent initialized with %d tasks"), AllTasks.Num())
+		}
+
+		for (URAITaskComponent* TaskComponent : AllTasks)
+		{
+			UClass* TaskClass = TaskComponent->GetClass();
+			TaskTypeToInstanceMap.Add(TaskClass, TaskComponent);
+
+			TaskComponent->ManagerComponent = this;
+			TaskComponent->DebugLoggingEnabled = DebugLoggingEnabled;
+			TaskComponent->MaxTaskLoopCount = MaxTaskLoopCount;
+
+			if (TaskComponent->IsPrimaryTask)
+			{
+				PrimaryTasks.Add(TaskComponent);
+			}
+
+			TaskComponent->OwnerController = OwningController;
+		}
 	}
 }
 
@@ -63,10 +82,22 @@ URAITaskComponent* URAIManagerComponent::GetTaskByClass(TSubclassOf<URAITaskComp
 
 void URAIManagerComponent::UpdateActiveTasks()
 {
+	if (OwningController == nullptr)
+	{
+		return;
+	}
+
 	if (ActiveTask && ReinvokeActiveTask)
 	{
 		// this is a fallback case where the task returned without finishing or initiating a wait, we will keep
 		// we will keep starting it until it finishes or reaches the max loop count
+
+		if (DebugLoggingEnabled)
+		{
+			UE_LOG(LogTemp, Display, TEXT("Task %s returned without finishing or initiating a wait, reinvoking."),
+			       *(ActiveTask->GetFName().ToString() ))
+		}
+
 		ReinvokeActiveTask = false;
 		StartTask(ActiveTask);
 		return;
@@ -82,10 +113,13 @@ void URAIManagerComponent::UpdateActiveTasks()
 	// If we are continuing the same task
 	if (ActiveTask && (ActiveTask == BestTask))
 	{
-		if (!ActiveTask->IsTaskActive) // wake up if not active, should never happen
+		if (!ActiveTask->IsTaskActive && ActiveTask->IsTaskReady()) // wake up if not active, should never happen
 		{
-			UE_LOG(LogTemp, Warning, TEXT("AI Active task  %s was not active, waking up."),
-			       *(ActiveTask->GetFName().ToString() ))
+			if (DebugLoggingEnabled)
+			{
+				UE_LOG(LogTemp, Display, TEXT("AI Active task  %s was not active, waking up."),
+				       *(ActiveTask->GetFName().ToString() ))
+			}
 
 			StartTask(ActiveTask);
 		}
@@ -95,11 +129,26 @@ void URAIManagerComponent::UpdateActiveTasks()
 
 	if (!ActiveTask || !ActiveTask->IsTaskActive)
 	{
+		if (DebugLoggingEnabled)
+		{
+			UE_LOG(LogTemp, Display, TEXT("No Active task, starting best task  %s."),
+			       *(BestTask->GetFName().ToString() ))
+		}
+
 		StartTask(BestTask);
 	}
 	else if (BestTask && CheckIfTaskShouldInterrupt(ActiveTask, BestTask))
 	{
-		ActiveTask->EndTask(false); //Ensure clean up
+		if (DebugLoggingEnabled)
+		{
+			UE_LOG(LogTemp, Display, TEXT("Task %s is interrupting task %s."),
+			       *(BestTask->GetFName().ToString() ), *(ActiveTask->GetFName().ToString() ))
+		}
+
+		// We are interrupting one task for another
+		ActiveTask->EndTask(false, true);
+
+		OwningController->StopMovement();
 		OnAnyTaskExit.Broadcast(ActiveTask);
 
 		StartTask(BestTask);
@@ -110,6 +159,11 @@ void URAIManagerComponent::StartTask(URAITaskComponent* Task, FRAITaskInvokeArgu
 {
 	ActiveTask = Task;
 	Task->BeginTask(InvokeArguments);
+
+	if (DebugLoggingEnabled)
+	{
+		UE_LOG(LogTemp, Display, TEXT("Starting task %s."), *(Task->GetFName().ToString() ))
+	}
 
 	if (Task->IsTaskActive && !Task->IsWaiting && Task->Cooldown <= 0.f)
 	{
@@ -132,6 +186,11 @@ void URAIManagerComponent::ForceInterruptActiveTask(URAITaskComponent* AssumedAc
 {
 	if (AssumedActiveTask && AssumedActiveTask == ActiveTask)
 	{
+		if (DebugLoggingEnabled)
+		{
+			UE_LOG(LogTemp, Display, TEXT("Forcing task %s to end."), *(ActiveTask->GetFName().ToString() ))
+		}
+
 		// Interrupt the active task
 		AssumedActiveTask->EndTask(false);
 		OnAnyTaskExit.Broadcast(ActiveTask);
@@ -156,17 +215,50 @@ void URAIManagerComponent::InvokeTask(TSubclassOf<URAITaskComponent> TaskClass, 
 {
 	if (URAITaskComponent* InvokedTask = GetTaskByClass(TaskClass))
 	{
+		if (DebugLoggingEnabled)
+		{
+			UE_LOG(LogTemp, Display, TEXT("Invoking task %s."), *(InvokedTask->GetFName().ToString() ))
+		}
+
 		InvokedTask->ParentInvokingTask = ParentInvokingTask;
 		ParentInvokingTask->ChildInvokedTask = InvokedTask;
 		InvokedTask->InvokeArgs = InvokeArguments;
 		ParentInvokingTask->IsWaiting = true;
-		OwningController->TraceThought(FString("Invoking task: ") + InvokedTask->GetFName().ToString());
 		StartTask(InvokedTask, InvokeArguments);
 	}
 	else
 	{
 		UE_LOG(LogTemp, Error, TEXT("Could not find task of class: %s, did you add the task to your AI?"),
 		       *(TaskClass->GetFName().ToString() ))
+	}
+}
+
+void URAIManagerComponent::TaskEnded(URAITaskComponent* Task)
+{
+	if (Task == ActiveTask)
+	{
+		if (DebugLoggingEnabled)
+		{
+			UE_LOG(LogTemp, Display, TEXT("Active Task %s ended."), *(Task->GetFName().ToString() ))
+		}
+
+		ActiveTask = nullptr;
+	}
+}
+
+void URAIManagerComponent::ReturnToInvokingTask(URAITaskComponent* CompletedTask, URAITaskComponent* ParentTask,
+                                                bool Success)
+{
+	if (ParentTask != nullptr)
+	{
+		if (DebugLoggingEnabled)
+		{
+			UE_LOG(LogTemp, Display, TEXT("Task %s completed successfully, returning to invoking parent task %s"),
+			       *(CompletedTask->GetClass()->GetName()), *(ParentTask->GetClass()->GetName()))
+		}
+
+		ActiveTask = ParentTask;
+		ParentTask->OnInvokedTaskCompleted(Success);
 	}
 }
 
@@ -186,8 +278,7 @@ URAITaskComponent* URAIManagerComponent::UpdateTaskPriorities()
 		}
 
 		float Priority = Task->CalculatePriority();
-		//This isn't const for debug purposes, so this method and loop can't be const.
-		Task->Priority = Priority;
+		Task->SetPriority(Priority);
 
 		if (Task->IsTaskReady() && Priority > BestTaskScore)
 		{
@@ -200,7 +291,7 @@ URAITaskComponent* URAIManagerComponent::UpdateTaskPriorities()
 }
 
 bool URAIManagerComponent::CheckIfTaskShouldInterrupt(const URAITaskComponent* TaskToInterrupt,
-                                                      const URAITaskComponent* InterruptingTask)
+                                                      const URAITaskComponent* InterruptingTask) const
 {
 	if (!ActiveTask || !InterruptingTask)
 	{
@@ -213,7 +304,8 @@ bool URAIManagerComponent::CheckIfTaskShouldInterrupt(const URAITaskComponent* T
 	switch (ActiveTaskInterruptionType)
 	{
 	case ERAIInterruptionType::Always:
-		return true;
+		priorityGap = 0.01f;
+		break;
 
 	case ERAIInterruptionType::WaitASec:
 		priorityGap = WaitASecInterruptPriorityGap;
@@ -239,5 +331,15 @@ bool URAIManagerComponent::CheckIfTaskShouldInterrupt(const URAITaskComponent* T
 		return false;
 	}
 
-	return (InterruptingTask->Priority - TaskToInterrupt->Priority) > priorityGap;
+	bool ShouldInterrupt = (InterruptingTask->GetPriority() - TaskToInterrupt->GetPriority()) > priorityGap;
+
+	if (DebugLoggingEnabled)
+	{
+		URancUtilityLibrary::ThrottledLog(
+			FString("Task ") + InterruptingTask->GetFName().ToString() + FString(" should interrupt ") + TaskToInterrupt
+			->GetFName().ToString() + FString(" = ") + (ShouldInterrupt ? FString("true") : FString("false")), 3.f,
+			FString("ShouldInterrupt"));
+	}
+
+	return ShouldInterrupt;
 }
