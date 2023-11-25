@@ -12,8 +12,8 @@ public class RancPriorityTaskAI : ModuleRules
 			new string[]
 			{
 				"Core",
-				"AIModule",
-				"RancUtilities",
+				"AIModule"
+				"RancUtilities"
 				"AIModule",
 				"NavigationSystem"
 			}
@@ -31,5 +31,11 @@ public class RancPriorityTaskAI : ModuleRules
 				// ... add private dependencies that you statically link with here ...	
 			}
 			);
+		
+		PrivateIncludePaths.AddRange(
+			new string[] {
+				"RancPriorityTaskAI/Public/RancUtilities"
+			}
+		);
 	}
 }
