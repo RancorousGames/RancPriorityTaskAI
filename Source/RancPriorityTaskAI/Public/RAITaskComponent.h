@@ -106,11 +106,11 @@ public:
 
 	/*  This is called by the manager component whenever we begin this task ends */
 	UFUNCTION(BlueprintCallable, BlueprintNativeEvent, Category = RAI,
-		Meta = (SuccessToolTip = "Whether the task succeeded.", AdvancedDisplay = "InterruptParentInvokers",
-			InterruptParentInvokersToolTip =
-			"Whether to interrupt the parent invokers. If true then parents will also end and OnInvokedTaskCompleted will not be called."
+		Meta = (SuccessToolTip = "Whether the task succeeded.", AdvancedDisplay = "WasInterrupted",
+			WasInterruptedToolTip =
+			"If the task ended because of a more important task interrupted it. All tasks in the invoking chain will end and OnInvokedTaskReturned will not be called."
 		))
-	void EndTask(bool Success = true, bool InterruptParentInvokers = false);
+	void EndTask(bool Success = true, bool WasInterrupted = false);
 
 	/* Start the task over and call BeginTask again */
 	UFUNCTION(BlueprintCallable, Category = RAI)

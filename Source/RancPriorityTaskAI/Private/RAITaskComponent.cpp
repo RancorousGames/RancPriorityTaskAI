@@ -36,7 +36,7 @@ void URAITaskComponent::BeginTask_Implementation(const FRAITaskInvokeArguments& 
 	CheckForInfLoop();
 }
 
-void URAITaskComponent::EndTask_Implementation(bool Success, bool InterruptParentInvokers)
+void URAITaskComponent::EndTask_Implementation(bool Success, bool WasInterrupted)
 {
 	if (DebugLoggingEnabled)
 	{
@@ -56,30 +56,17 @@ void URAITaskComponent::EndTask_Implementation(bool Success, bool InterruptParen
 		auto* CurrentParentInvokingTask = ParentInvokingTask;
 		ParentInvokingTask = nullptr;
 
-		if (!InterruptParentInvokers)
+		if (!WasInterrupted)
 		{
 			CurrentParentInvokingTask->CheckForInfLoop();
 
 			ManagerComponent->ReturnToInvokingTask(this, CurrentParentInvokingTask, Success);
 		}
-		else // Interrupt all Parent Invokers
-		{
-			if (DebugLoggingEnabled)
-			{
-				UE_LOG(LogTemp, Display, TEXT("Task %s interrupted, interrupting parent tasks"), *GetClass()->GetName());
-			}
-				
-			while(CurrentParentInvokingTask != nullptr)
-			{
-				CurrentParentInvokingTask->EndTask(false);
-				CurrentParentInvokingTask = CurrentParentInvokingTask->ParentInvokingTask;
-			}
-		}
 	}
 
 	if (ChildInvokedTask != nullptr)
 	{
-		ChildInvokedTask->EndTask(false);
+		ChildInvokedTask->EndTask(false, WasInterrupted);
 		ChildInvokedTask = nullptr;
 	}
 }

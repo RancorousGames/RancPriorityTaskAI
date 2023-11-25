@@ -146,7 +146,15 @@ void URAIManagerComponent::UpdateActiveTasks()
 		}
 
 		// We are interrupting one task for another
-		ActiveTask->EndTask(false, true);
+		if (auto* Ancestor = ActiveTask->GetOldestInvokingAncestor())
+		{
+			// ancestor will trigger EndTask in all its children
+			Ancestor->EndTask(false, true);
+		}
+		else
+		{
+			ActiveTask->EndTask(false, true);
+		}
 
 		OwningController->StopMovement();
 		OnAnyTaskExit.Broadcast(ActiveTask);
