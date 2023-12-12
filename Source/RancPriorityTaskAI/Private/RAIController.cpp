@@ -55,7 +55,10 @@ void ARAIController::OnPossess(APawn* InPawn)
 		ManagerComponent = FindComponentByClass<URAIManagerComponent>();
 	}
 
-	ManagerComponent->Initialize(this, InPawn);
+	if (ManagerComponent)
+	{
+		ManagerComponent->Initialize(this, InPawn);
+	}
 }
 
 void ARAIController::OnPerceptionUpdated(AActor* Actor, FAIStimulus Stimulus)
