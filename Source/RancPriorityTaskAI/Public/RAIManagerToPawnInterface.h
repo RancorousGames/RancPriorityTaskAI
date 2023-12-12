@@ -1,4 +1,4 @@
-// Copyright Zachary Kolansky, 2020
+// Copyright Rancorous Games, 2023
 
 #pragma once
 

@@ -1,3 +1,5 @@
+// Copyright Rancorous Games, 2023
+
 #include "RAIManagerComponent.h"
 
 #include "RAITaskComponent.h"

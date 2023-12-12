@@ -1,15 +1,16 @@
 {
 	"FileVersion": 3,
 	"Version": 1,
-	"VersionName": "0.5",
+	"VersionName": "1.0",
 	"FriendlyName": "Ranc Priority Task AI",
 	"Description": "An advanced and optimized task and priority based AI system",
 	"Category": "AI",
 	"CreatedBy": "Rancorous Games",
 	"CreatedByURL": "https://twitter.com/RancorousGames",
-	"DocsURL": "https://miro.com/app/board/uXjVNOGEHRU=/?share_link_id=758389896638",
-	"MarketplaceURL": "",
-	"SupportURL": "",
+	"DocsURL": "https://docs.google.com/document/d/1a8YC5EDQ8LgivFHrEK1V7WqRkWT7-opfUdmZLrSdk-I/edit?usp=sharing",
+	"MarketplaceURL": "com.epicgames.launcher://ue/marketplace/product/1aafef680b374b63887052cd595abba4",
+	"SupportURL": "https://discord.gg/SrRycWdkBQ",
+	"EngineVersion": "5.3.0",
 	"CanContainContent": true,
 	"IsBetaVersion": false,
 	"IsExperimentalVersion": false,
@@ -28,8 +29,9 @@
 		}
 	],
 	"Plugins": [
-	{
-		"Name": "RancUtilities",
-		"Enabled": true
-	}]
+		{
+			"Name": "RancUtilities",
+			"Enabled": true
+		}
+	]
 }

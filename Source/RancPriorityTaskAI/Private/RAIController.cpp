@@ -1,7 +1,8 @@
+// Copyright Rancorous Games, 2023
+
 #include "RAIController.h"
 #include "RAIManagerComponent.h"
 #include "Perception/AIPerceptionComponent.h"
-
 
 class URAITaskComponent;
 class URAIManagerComponent;

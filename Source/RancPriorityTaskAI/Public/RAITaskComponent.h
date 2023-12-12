@@ -1,3 +1,5 @@
+// Copyright Rancorous Games, 2023
+
 #pragma once
 
 #include "CoreMinimal.h"
@@ -42,7 +44,7 @@ public:
 
 	/*  Whether a task is currently active/running */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Transient, Category = "RAI|Configuration")
-	bool IsPrimaryTask = false;
+	bool IsPrimaryTask = true;
 
 	/*  Time in seconds that must pass until the task can fire again. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RAI|Configuration")
@@ -52,7 +54,7 @@ public:
 	/*  Always will always let a higher priority task interrupt, Never will never let a higher priority task interrupt. */
 	/*  In between options require a certain amount of exceeding priority. See ERAIInterruptionType for options. */
 	/*  A task may switch InterruptType dynamically while active, but it will be reset to default InterruptType when ended. */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RAI|Configuration")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RAI|Status")
 	ERAIInterruptionType InterruptType = ERAIInterruptionType::Always;
 
 	/*  The default starting InterruptType, also used after a task has ended. */
