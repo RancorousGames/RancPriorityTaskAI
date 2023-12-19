@@ -19,7 +19,7 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FUtilityTaskEvent, URAITaskComponent
 /*
 Determines which tasks are the best to do.
 */
-UCLASS(Blueprintable, BlueprintType, ClassGroup=(UtilityCombat), meta=(BlueprintSpawnableComponent))
+UCLASS(Blueprintable, BlueprintType, ClassGroup=(RAI), meta=(BlueprintSpawnableComponent))
 class RANCPRIORITYTASKAI_API URAIManagerComponent : public UActorComponent
 {
 	GENERATED_BODY()

@@ -32,6 +32,10 @@
 		{
 			"Name": "RancUtilities",
 			"Enabled": true
+		},
+		{
+			"Name": "GameplayTagsEditor",
+			"Enabled": true
 		}
 	]
 }

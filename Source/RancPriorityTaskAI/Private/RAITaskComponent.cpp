@@ -1,6 +1,8 @@
 // Copyright Rancorous Games, 2023
 
 #include "RAITaskComponent.h"
+
+#include "GameplayTagContainer.h"
 #include "RAIManagerComponent.h"
 #include "RAIController.h"
 #include "TimerManager.h"
@@ -137,6 +139,10 @@ bool URAITaskComponent::CheckForInfLoop()
 }
 
 void URAITaskComponent::OnPerceptionStimulus_Implementation(AActor* actor, FAIStimulus Stimulus)
+{
+}
+
+void URAITaskComponent::OnCustomTrigger_Implementation(FGameplayTag Trigger, UObject* Payload)
 {
 }
 

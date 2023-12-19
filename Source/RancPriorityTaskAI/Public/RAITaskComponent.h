@@ -14,7 +14,7 @@ class ARAIController;
 
 
 /*  The Purpose of this component is to encapsulate a specific task that an AI can do. */
-UCLASS(Blueprintable, BlueprintType, ClassGroup=(UtilityCombat), meta=(BlueprintSpawnableComponent))
+UCLASS(Blueprintable, BlueprintType, ClassGroup=(RAI), meta=(BlueprintSpawnableComponent))
 class RANCPRIORITYTASKAI_API URAITaskComponent : public UActorComponent
 {
 	GENERATED_BODY()
@@ -192,6 +192,9 @@ public:
 	/* ONLY CALL FROM MANAGER COMPONENT */
 	UFUNCTION(BlueprintNativeEvent, Category = RAI)
 	void OnPerceptionStimulus(AActor* Actor, FAIStimulus Stimulus);
+	
+	UFUNCTION(BlueprintNativeEvent, Category = RAI)
+	void OnCustomTrigger(FGameplayTag Trigger, UObject* Payload);
 
 	/*  False if on Cooldown */
 	UFUNCTION(BlueprintPure, Category = "RAI|ManagerInterface")

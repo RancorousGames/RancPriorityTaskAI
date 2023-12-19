@@ -67,6 +67,15 @@ public:
 	UFUNCTION(BlueprintCallable, Category = RAI)
 	void TraceThought(FString Thought);
 
+	/* Triggers a custom event on the task of the specified class, react to it by overloading OnCustomTrigger in Task 
+	 * Payload may be any object you want to pass to the task */
+	UFUNCTION(BlueprintCallable, Category = RAI)
+	void TriggerCustom(TSubclassOf<URAITaskComponent> Task, FGameplayTag Trigger, UObject* Payload);
+	
+	/* Triggers a custom event on all tasks, react to it by overloading OnCustomTrigger in Task
+	 * Payload may be any object you want to pass to the task */
+	UFUNCTION(BlueprintCallable, Category = RAI)
+	void TriggerCustomAll(FGameplayTag Trigger, UObject* Payload);
 
 private:
 	
