@@ -66,6 +66,11 @@ void URAIManagerComponent::Initialize(ARAIController* Controller, APawn* Pawn)
 
 			TaskComponent->OwnerController = OwningController;
 		}
+
+		for (URAITaskComponent* TaskComponent : AllTasks)
+		{
+			TaskComponent->Initialize(Character, OwningController);
+		}
 	}
 }
 

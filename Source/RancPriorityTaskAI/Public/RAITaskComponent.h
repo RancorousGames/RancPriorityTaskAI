@@ -23,11 +23,6 @@ public:
 	// Sets default values for this component's properties
 	URAITaskComponent();
 
-protected:
-	// Called when the game starts
-	virtual void BeginPlay() override;
-
-public:
 	//*************************************************************************
 	//* Static references
 	//*************************************************************************
@@ -37,6 +32,9 @@ public:
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "RAI|References")
 	ARAIController* OwnerController = nullptr;
+	
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "RAI|References")
+	ACharacter* Character = nullptr;
 
 	//*************************************************************************
 	//* Configuration
@@ -101,7 +99,11 @@ public:
 	/*  Get the current priority of this task, if it is an invoked task it will return the priority of its oldest ancestor or 0 if not invoked */
 	UFUNCTION(BlueprintCallable, Category = RAI)
 	float GetPriority() const;
-
+	
+	/*  This is called when the AIController OnPossess is called and it and ManagerComponent are both initialized */
+	UFUNCTION(BlueprintCallable, BlueprintNativeEvent, Category = RAI)
+	void Initialize(ACharacter* _Character, ARAIController* _OwnerController);
+	
 	/*  This is called by the manager component whenever we begin this task */
 	UFUNCTION(BlueprintCallable, BlueprintNativeEvent, Category = RAI)
 	void BeginTask(const FRAITaskInvokeArguments& InvokeArguments = FRAITaskInvokeArguments());

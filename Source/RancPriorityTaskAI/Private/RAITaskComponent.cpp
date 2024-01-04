@@ -16,11 +16,8 @@ URAITaskComponent::URAITaskComponent()
 	PrimaryComponentTick.bCanEverTick = false;
 }
 
-// Called when the game starts
-void URAITaskComponent::BeginPlay()
+void URAITaskComponent::Initialize_Implementation(ACharacter* _Character, ARAIController* _OwnerController)
 {
-	Super::BeginPlay();
-	
 	InterruptType = DefaultInterruptType;
 
 	// Validate configuration values.
