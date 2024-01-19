@@ -37,7 +37,8 @@ inline void ARAIController::BeginPlay()
 
 void ARAIController::TraceThought(FString Thought)
 {
-   Thoughts.Add(Thought);
+    Thoughts.Add(Thought);
+	OnThoughtTrace.Broadcast(Thought);
 
 	// Check if the thoughts count exceeds the maximum allowed
 	if (Thoughts.Num() > MaxThoughtMemoryCount)
@@ -74,6 +75,27 @@ void ARAIController::TriggerCustomAll(FGameplayTag Trigger, UObject* Payload)
 			Task->OnCustomTrigger(Trigger, Payload);
 		}
 	}
+}
+
+void ARAIController::SetRAIActive(bool ShouldBeActive)
+{
+	bRAIActive = ShouldBeActive;
+	ManagerComponent->SetActive(ShouldBeActive);
+
+	TraceThought(FString("RAI set to: ") + (ShouldBeActive ? "Active" : "Inactive"));
+	if (ShouldBeActive)
+	{
+		AIPerceptionComponent->OnTargetPerceptionUpdated.AddDynamic(this, &ARAIController::OnPerceptionUpdated);
+	}
+	else
+	{
+		AIPerceptionComponent->OnTargetPerceptionUpdated.RemoveDynamic(this, &ARAIController::OnPerceptionUpdated);
+	}
+}
+
+bool ARAIController::IsRAIActive()
+{
+	return bRAIActive;
 }
 
 void ARAIController::OnPossess(APawn* InPawn)

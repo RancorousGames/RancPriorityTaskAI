@@ -8,6 +8,8 @@
 
 class URAIManagerComponent;
 
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnThoughtTrace, FString, Thought);
+
 /**
  * A custom AIController base to expose basic functionality of the TeamSystem to Blueprint, and 
  * provide a way to modify the result from GetFocalPointOnActor() with Blueprints.
@@ -54,7 +56,6 @@ public:
 	UPROPERTY(VisibleAnywhere,BlueprintReadOnly,Category = Status)
 	TArray<FString> Thoughts;
 	
-	
 	/* An array of traced thoughts used primarily for debugging */
 	UPROPERTY(VisibleAnywhere,BlueprintReadOnly,Category = Status)
 	URAIManagerComponent* ManagerComponent;
@@ -62,6 +63,9 @@ public:
 //*************************************************************************
 //* Methods
 //*************************************************************************
+	
+	UPROPERTY(BlueprintAssignable, Category = RAI)
+	FOnThoughtTrace OnThoughtTrace;
 	
 	/*  Add a thought to Thoughts */
 	UFUNCTION(BlueprintCallable, Category = RAI)
@@ -76,6 +80,14 @@ public:
 	 * Payload may be any object you want to pass to the task */
 	UFUNCTION(BlueprintCallable, Category = RAI)
 	void TriggerCustomAll(FGameplayTag Trigger, UObject* Payload);
+	
+	/*  Enable Disable the AI, e.g. call on death of the character */
+	UFUNCTION(BlueprintCallable, Category = RAI)
+	void SetRAIActive(bool ShouldBeActive);
+	
+	/*  Whether the AI is enabled/disabled, set by calling SetRAIActive */
+	UFUNCTION(BlueprintCallable, Category = RAI)
+	bool IsRAIActive();
 
 private:
 	
@@ -84,5 +96,6 @@ private:
 
 	UFUNCTION()
 	void OnPerceptionUpdated(AActor* Actor, FAIStimulus Stimulus);
-	
+
+	bool bRAIActive = true;
 };

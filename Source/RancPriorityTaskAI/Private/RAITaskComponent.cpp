@@ -162,6 +162,16 @@ void URAITaskComponent::Restart()
 	{
 		UE_LOG(LogTemp, Display, TEXT("Task %s restarting"), *GetClass()->GetName());
 	}
+
+	if (!OwnerController->IsRAIActive())
+	{
+		if (DebugLoggingEnabled)
+		{
+			UE_LOG(LogTemp, Display, TEXT("Task %s attempted restarting but RAI had been deactivated on controller"), *GetClass()->GetName());
+		}
+		
+		return;
+	}
 	
 	if (LoopPenaltyApplied || CheckForInfLoop())
 	{
@@ -249,11 +259,11 @@ void URAITaskComponent::DoneWaiting(ERAIInterruptionType InterruptTypeToReturnTo
 		UE_LOG(LogTemp, Display, TEXT("Task %s done waiting"), *GetClass()->GetName());
 	}
 
-	if (WasInterrupted)
+	if (WasInterrupted || !OwnerController->IsRAIActive())
 	{
 		if (DebugLoggingEnabled)
 		{
-			UE_LOG(LogTemp, Display, TEXT("Task %s was interrupted while waiting"), *GetClass()->GetName());
+			UE_LOG(LogTemp, Display, TEXT("Task %s was interrupted or RAI deactivated while waiting"), *GetClass()->GetName());
 		}
 		
 		ReturnBranch = EDoneWaitingExecutionStates::TaskEnded;
