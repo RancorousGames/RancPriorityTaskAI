@@ -140,7 +140,7 @@ public:
 	
 	void Initialize(ARAIController* Controller, APawn* Pawn);
 	void OnPerceptionStimulus(AActor* Actor, FAIStimulus Stimulus);
-	void InvokeTask(TSubclassOf<URAITaskComponent> TaskClass, URAITaskComponent*  ParentInvokingTask, FRAITaskInvokeArguments& InvokeArguments);
+	bool InvokeTask(TSubclassOf<URAITaskComponent> TaskClass, URAITaskComponent*  ParentInvokingTask, FRAITaskInvokeArguments& InvokeArguments);
 	void TaskEnded(URAITaskComponent* Task);
 	void ReturnToInvokingTask(URAITaskComponent* CompletedTask, URAITaskComponent* ParentTask, bool Success);
 

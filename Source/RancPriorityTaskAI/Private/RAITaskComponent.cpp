@@ -33,11 +33,12 @@ void URAITaskComponent::BeginTask_Implementation(const FRAITaskInvokeArguments& 
 	WorldTimeBegun = GetWorld()->GetTimeSeconds();
 	IsTaskActive = true;
 	IsWaiting = false;
+	NextBeginCooldown = 0.0f;
 	
 	CheckForInfLoop();
 }
 
-void URAITaskComponent::EndTask_Implementation(bool Success, bool WasInterrupted)
+void URAITaskComponent::EndTask_Implementation(bool Success, float BeginAgainCooldown, bool WasInterrupted)
 {
 	if (DebugLoggingEnabled)
 	{
@@ -50,6 +51,7 @@ void URAITaskComponent::EndTask_Implementation(bool Success, bool WasInterrupted
 	IsWaiting = false;
 	InvokeArgs = FRAITaskInvokeArguments();
 	InterruptType = DefaultInterruptType;
+	NextBeginCooldown = BeginAgainCooldown;
 
 	if (ParentInvokingTask != nullptr)
 	{
@@ -67,26 +69,26 @@ void URAITaskComponent::EndTask_Implementation(bool Success, bool WasInterrupted
 
 	if (ChildInvokedTask != nullptr)
 	{
-		ChildInvokedTask->EndTask(false, WasInterrupted);
+		ChildInvokedTask->EndTask(false, 0, WasInterrupted);
 		ChildInvokedTask = nullptr;
 	}
 }
 
 bool URAITaskComponent::IsTaskReady()
 {
-	if (Cooldown <= 0.0f || WorldTimeBegun <= 0.0f)
+	if (NextBeginCooldown <= 0 && Cooldown <= 0.0f || WorldTimeBegun <= 0.0f)
 	{
 		return true; //Either Cooldown is none, or we haven't done the task yet.
 	}
 
 	const float CurrentTime = GetWorld()->GetTimeSeconds();
-	
-	if (CurrentTime - WorldTimeBegun >= Cooldown)
+
+	if (NextBeginCooldown > 0)
 	{
-		return true;
+		return CurrentTime - WorldTimeBegun >= NextBeginCooldown;
 	}
 	
-	return false;
+	return CurrentTime - WorldTimeBegun >= Cooldown;
 }
 
 void URAITaskComponent::SetPriority(float NewPriority)
@@ -204,10 +206,10 @@ void URAITaskComponent::Restart()
 	}
 }
 
-void URAITaskComponent::InvokeTask(TSubclassOf<URAITaskComponent> TaskClass,
+bool URAITaskComponent::InvokeTask(TSubclassOf<URAITaskComponent> TaskClass,
                                    FRAITaskInvokeArguments InvokeArguments)
 {
-	ManagerComponent->InvokeTask(TaskClass, this, InvokeArguments);
+	return ManagerComponent->InvokeTask(TaskClass, this, InvokeArguments);
 }
 
 void URAITaskComponent::TraceThought(FString Thought)

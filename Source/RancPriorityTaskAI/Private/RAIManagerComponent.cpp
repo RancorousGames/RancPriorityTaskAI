@@ -225,7 +225,7 @@ void URAIManagerComponent::OnPerceptionStimulus(AActor* Actor, FAIStimulus Stimu
 	}
 }
 
-void URAIManagerComponent::InvokeTask(TSubclassOf<URAITaskComponent> TaskClass, URAITaskComponent* ParentInvokingTask,
+bool URAIManagerComponent::InvokeTask(TSubclassOf<URAITaskComponent> TaskClass, URAITaskComponent* ParentInvokingTask,
                                       FRAITaskInvokeArguments& InvokeArguments)
 {
 	if (URAITaskComponent* InvokedTask = GetTaskByClass(TaskClass))
@@ -240,12 +240,15 @@ void URAIManagerComponent::InvokeTask(TSubclassOf<URAITaskComponent> TaskClass, 
 		InvokedTask->InvokeArgs = InvokeArguments;
 		ParentInvokingTask->IsWaiting = true;
 		StartTask(InvokedTask, InvokeArguments);
+
+		return true;
 	}
 	else
 	{
 		UE_LOG(LogTemp, Error, TEXT("Could not find task of class: %s, did you add the task to your AI?"),
 		       *(TaskClass->GetFName().ToString() ))
 	}
+	return false;
 }
 
 void URAIManagerComponent::TaskEnded(URAITaskComponent* Task)

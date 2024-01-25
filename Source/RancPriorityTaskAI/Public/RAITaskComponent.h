@@ -47,6 +47,10 @@ public:
 	/*  Time in seconds that must pass until the task can fire again. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RAI|Configuration")
 	float Cooldown = 0.0f;
+	
+	/* Single use cooldown. Time in seconds that must pass until the task can fire again, reset to 0 next time BeginTask is called. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RAI|Configuration")
+	float NextBeginCooldown = 0.0f;
 
 	/*  A task reaching a higher priority of another task may interrupt the other task depending on the InterruptType */
 	/*  Always will always let a higher priority task interrupt, Never will never let a higher priority task interrupt. */
@@ -110,11 +114,12 @@ public:
 
 	/*  This is called by the manager component whenever we begin this task ends */
 	UFUNCTION(BlueprintCallable, BlueprintNativeEvent, Category = RAI,
-		Meta = (SuccessToolTip = "Whether the task succeeded.", AdvancedDisplay = "WasInterrupted",
+		Meta = (SuccessToolTip = "Whether the task succeeded.", AdvancedDisplay = "WasInterrupted, BeginAgainCooldown",
+		    BeginAgainCooldownToolTip = "Only works on primary tasks. Sets a single use cooldown on the task, preventing it from being started again for the specified duration.",
 			WasInterruptedToolTip =
 			"If the task ended because of a more important task interrupted it. All tasks in the invoking chain will end and OnInvokedTaskReturned will not be called."
 		))
-	void EndTask(bool Success = true, bool WasInterrupted = false);
+	void EndTask(bool Success = true, float BeginAgainCooldown = 0, bool WasInterrupted = false);
 
 	/* Start the task over and call BeginTask again */
 	UFUNCTION(BlueprintCallable, Category = RAI)
@@ -125,7 +130,7 @@ public:
 
 	/*  A Primary Task may invoke another task to perform something, e.g. a GetFood task might invoke a Hunt task */
 	UFUNCTION(BlueprintCallable, Category = RAI)
-	void InvokeTask(TSubclassOf<URAITaskComponent> TaskClass, FRAITaskInvokeArguments InvokeArguments);
+	bool InvokeTask(TSubclassOf<URAITaskComponent> TaskClass, FRAITaskInvokeArguments InvokeArguments);
 
 	/*  Add a thought to RAIControllers thoughts for debugging */
 	UFUNCTION(BlueprintCallable, Category = RAI)
