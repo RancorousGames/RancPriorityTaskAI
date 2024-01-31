@@ -19,6 +19,7 @@ URAITaskComponent::URAITaskComponent()
 void URAITaskComponent::Initialize_Implementation(ACharacter* _Character, ARAIController* _OwnerController)
 {
 	InterruptType = DefaultInterruptType;
+	Character = _Character;
 
 	// Validate configuration values.
 	if (Cooldown < 0.0f)
