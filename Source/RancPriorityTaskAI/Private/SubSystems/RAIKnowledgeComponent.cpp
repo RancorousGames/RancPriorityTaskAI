@@ -1,4 +1,6 @@
-﻿#include "RAIKnowledgeComponent.h"
+﻿// Copyright Rancorous Games, 2024
+
+#include "SubSystems/RAIKnowledgeComponent.h"
 
 // Constructor
 URAIKnowledgeComponent::URAIKnowledgeComponent()
