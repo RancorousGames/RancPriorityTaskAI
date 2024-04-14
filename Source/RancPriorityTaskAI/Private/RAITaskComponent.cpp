@@ -5,6 +5,7 @@
 #include "GameplayTagContainer.h"
 #include "RAIManagerComponent.h"
 #include "RAIController.h"
+#include "RAILogCategory.h"
 #include "TimerManager.h"
 #include "Math/UnrealMathUtility.h"
 
@@ -43,7 +44,7 @@ void URAITaskComponent::EndTask_Implementation(bool Success, float BeginAgainCoo
 {
 	if (DebugLoggingEnabled)
 	{
-		UE_LOG(LogTemp, Display, TEXT("Task %s ended with success %d"), *GetClass()->GetName(), Success);
+		UE_LOG(LogRAI, Display, TEXT("Task %s ended with success %d"), *GetClass()->GetName(), Success);
 	}
 	
 	ManagerComponent->TaskEnded(this);
@@ -115,7 +116,7 @@ bool URAITaskComponent::CheckForInfLoop()
 	{
 		 if (DebugLoggingEnabled)
 		 {
-			 UE_LOG(LogTemp, Warning, TEXT("Task %s Infinite loop detection"), *GetClass()->GetName());
+			 UE_LOG(LogRAI, Warning, TEXT("Task %s Infinite loop detection"), *GetClass()->GetName());
 		 }
 		
 		if (Cooldown <= 0.f)
@@ -125,7 +126,7 @@ bool URAITaskComponent::CheckForInfLoop()
 			while (TaskToSetCooldown != nullptr)
 			{
 				TaskToSetCooldown->Cooldown = 1.f;
-				UE_LOG(LogTemp, Warning, TEXT("Task %s seems to be in an infinite loop, adding a cooldown to it"), *GetClass()->GetName());
+				UE_LOG(LogRAI, Warning, TEXT("Task %s seems to be in an infinite loop, adding a cooldown to it"), *GetClass()->GetName());
 				TaskToSetCooldown = TaskToSetCooldown->ParentInvokingTask;
 			}
 
@@ -163,14 +164,14 @@ void URAITaskComponent::Restart()
 {
 	if (DebugLoggingEnabled)
 	{
-		UE_LOG(LogTemp, Display, TEXT("Task %s restarting"), *GetClass()->GetName());
+		UE_LOG(LogRAI, Display, TEXT("Task %s restarting"), *GetClass()->GetName());
 	}
 
 	if (!OwnerController->IsRAIActive())
 	{
 		if (DebugLoggingEnabled)
 		{
-			UE_LOG(LogTemp, Display, TEXT("Task %s attempted restarting but RAI had been deactivated on controller"), *GetClass()->GetName());
+			UE_LOG(LogRAI, Display, TEXT("Task %s attempted restarting but RAI had been deactivated on controller"), *GetClass()->GetName());
 		}
 		
 		return;
@@ -183,7 +184,7 @@ void URAITaskComponent::Restart()
 		{
 			if (DebugLoggingEnabled)
 			{
-				UE_LOG(LogTemp, Display, TEXT("Task %s delayed restart ready"), *GetClass()->GetName());
+				UE_LOG(LogRAI, Display, TEXT("Task %s delayed restart ready"), *GetClass()->GetName());
 			}
 			
 			InterruptType = LoopPenaltySavedInterruptType;
@@ -193,7 +194,7 @@ void URAITaskComponent::Restart()
 		{
 			if (DebugLoggingEnabled)
 			{
-				UE_LOG(LogTemp, Display, TEXT("Task %s has penalty so delaying Restart"), *GetClass()->GetName());
+				UE_LOG(LogRAI, Display, TEXT("Task %s has penalty so delaying Restart"), *GetClass()->GetName());
 			}
 			
 			LoopPenaltySavedInterruptType = InterruptType;
@@ -259,14 +260,14 @@ void URAITaskComponent::DoneWaiting(ERAIInterruptionType InterruptTypeToReturnTo
 	
 	if (DebugLoggingEnabled)
 	{
-		UE_LOG(LogTemp, Display, TEXT("Task %s done waiting"), *GetClass()->GetName());
+		UE_LOG(LogRAI, Display, TEXT("Task %s done waiting"), *GetClass()->GetName());
 	}
 
 	if (WasInterrupted || !OwnerController->IsRAIActive())
 	{
 		if (DebugLoggingEnabled)
 		{
-			UE_LOG(LogTemp, Display, TEXT("Task %s was interrupted or RAI deactivated while waiting"), *GetClass()->GetName());
+			UE_LOG(LogRAI, Display, TEXT("Task %s was interrupted or RAI deactivated while waiting"), *GetClass()->GetName());
 		}
 		
 		ReturnBranch = EDoneWaitingExecutionStates::TaskEnded;

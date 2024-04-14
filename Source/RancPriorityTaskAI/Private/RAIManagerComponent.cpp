@@ -3,11 +3,9 @@
 #include "RAIManagerComponent.h"
 
 #include "RAITaskComponent.h"
-#include "GenericPlatform/GenericPlatformMath.h"
-#include "Math/UnrealMathUtility.h"
 #include "GameFramework/Pawn.h"
-#include "Runtime/Engine/Public/DrawDebugHelpers.h"
 #include "RAIController.h"
+#include "RAILogCategory.h"
 #include "GameFramework/Character.h"
 #include "RancUtilityLibrary.h"
 
@@ -30,7 +28,7 @@ void URAIManagerComponent::Initialize(ARAIController* Controller, APawn* Pawn)
 
 		if (!OwningController)
 		{
-			UE_LOG(LogTemp, Error, TEXT("RAIManagerComponent must be attached to an RAIController"))
+			UE_LOG(LogRAI, Error, TEXT("RAIManagerComponent must be attached to an RAIController"))
 		}
 		else
 		{
@@ -38,7 +36,7 @@ void URAIManagerComponent::Initialize(ARAIController* Controller, APawn* Pawn)
 			// error if controlledpawn null
 			if (!Character)
 			{
-				UE_LOG(LogTemp, Error,
+				UE_LOG(LogRAI, Error,
 				       TEXT("Tried to initialize RAIManagerComponent but the controlled pawn was null"));
 			}
 
@@ -47,7 +45,7 @@ void URAIManagerComponent::Initialize(ARAIController* Controller, APawn* Pawn)
 
 		if (DebugLoggingEnabled)
 		{
-			UE_LOG(LogTemp, Display, TEXT("RAIManagerComponent initialized with %d tasks"), AllTasks.Num())
+			UE_LOG(LogRAI, Display, TEXT("RAIManagerComponent initialized with %d tasks"), AllTasks.Num())
 		}
 
 		for (URAITaskComponent* TaskComponent : AllTasks)
@@ -81,7 +79,7 @@ URAITaskComponent* URAIManagerComponent::GetTaskByClass(TSubclassOf<URAITaskComp
 		return TaskComponent;
 	}
 
-	UE_LOG(LogTemp, Error, TEXT("Could not find task of class: %s, did you add the task to your AI?"),
+	UE_LOG(LogRAI, Error, TEXT("Could not find task of class: %s, did you add the task to your AI?"),
 	       *(TaskClass->GetFName().ToString() ))
 
 	return nullptr;
@@ -101,7 +99,7 @@ void URAIManagerComponent::UpdateActiveTasks()
 
 		if (DebugLoggingEnabled)
 		{
-			UE_LOG(LogTemp, Display, TEXT("Task %s returned without finishing or initiating a wait, reinvoking."),
+			UE_LOG(LogRAI, Display, TEXT("Task %s returned without calling EndTask or initiating a wait, reinvoking. This indiciates a problem with your Task implementation."),
 			       *(ActiveTask->GetFName().ToString() ))
 		}
 
@@ -124,7 +122,7 @@ void URAIManagerComponent::UpdateActiveTasks()
 		{
 			if (DebugLoggingEnabled)
 			{
-				UE_LOG(LogTemp, Display, TEXT("AI Active task  %s was not active, waking up."),
+				UE_LOG(LogRAI, Display, TEXT("AI Active task  %s was not active, waking up."),
 				       *(ActiveTask->GetFName().ToString() ))
 			}
 
@@ -138,7 +136,7 @@ void URAIManagerComponent::UpdateActiveTasks()
 	{
 		if (DebugLoggingEnabled)
 		{
-			UE_LOG(LogTemp, Display, TEXT("No Active task, starting best task  %s."),
+			UE_LOG(LogRAI, Display, TEXT("No Active task, starting best task  %s."),
 			       *(BestTask->GetFName().ToString() ))
 		}
 
@@ -148,7 +146,7 @@ void URAIManagerComponent::UpdateActiveTasks()
 	{
 		if (DebugLoggingEnabled)
 		{
-			UE_LOG(LogTemp, Display, TEXT("Task %s is interrupting task %s."),
+			UE_LOG(LogRAI, Display, TEXT("Task %s is interrupting task %s."),
 			       *(BestTask->GetFName().ToString() ), *(ActiveTask->GetFName().ToString() ))
 		}
 
@@ -177,7 +175,7 @@ void URAIManagerComponent::StartTask(URAITaskComponent* Task, FRAITaskInvokeArgu
 
 	if (DebugLoggingEnabled)
 	{
-		UE_LOG(LogTemp, Display, TEXT("Starting task %s."), *(Task->GetFName().ToString() ))
+		UE_LOG(LogRAI, Display, TEXT("Starting task %s."), *(Task->GetFName().ToString() ))
 	}
 
 	if (Task->IsTaskActive && !Task->IsWaiting && Task->Cooldown <= 0.f)
@@ -186,7 +184,7 @@ void URAIManagerComponent::StartTask(URAITaskComponent* Task, FRAITaskInvokeArgu
 		if (!AnnouncedBadTaskReturnWarning)
 		{
 			AnnouncedBadTaskReturnWarning = true;
-			UE_LOG(LogTemp, Warning,
+			UE_LOG(LogRAI, Warning,
 			       TEXT("Task %s returned without finishing or initiating a wait. Did you forget to call EndTask?"),
 			       *(Task->GetFName().ToString() ))
 		}
@@ -203,7 +201,7 @@ void URAIManagerComponent::ForceInterruptActiveTask(URAITaskComponent* AssumedAc
 	{
 		if (DebugLoggingEnabled)
 		{
-			UE_LOG(LogTemp, Display, TEXT("Forcing task %s to end."), *(ActiveTask->GetFName().ToString() ))
+			UE_LOG(LogRAI, Display, TEXT("Forcing task %s to end."), *(ActiveTask->GetFName().ToString() ))
 		}
 
 		// Interrupt the active task
@@ -232,7 +230,7 @@ bool URAIManagerComponent::InvokeTask(TSubclassOf<URAITaskComponent> TaskClass, 
 	{
 		if (DebugLoggingEnabled)
 		{
-			UE_LOG(LogTemp, Display, TEXT("Invoking task %s."), *(InvokedTask->GetFName().ToString() ))
+			UE_LOG(LogRAI, Display, TEXT("Invoking task %s."), *(InvokedTask->GetFName().ToString() ))
 		}
 
 		InvokedTask->ParentInvokingTask = ParentInvokingTask;
@@ -245,7 +243,7 @@ bool URAIManagerComponent::InvokeTask(TSubclassOf<URAITaskComponent> TaskClass, 
 	}
 	else
 	{
-		UE_LOG(LogTemp, Error, TEXT("Could not find task of class: %s, did you add the task to your AI?"),
+		UE_LOG(LogRAI, Error, TEXT("Could not find task of class: %s, did you add the task to your AI?"),
 		       *(TaskClass->GetFName().ToString() ))
 	}
 	return false;
@@ -257,7 +255,7 @@ void URAIManagerComponent::TaskEnded(URAITaskComponent* Task)
 	{
 		if (DebugLoggingEnabled)
 		{
-			UE_LOG(LogTemp, Display, TEXT("Active Task %s ended."), *(Task->GetFName().ToString() ))
+			UE_LOG(LogRAI, Display, TEXT("Active Task %s ended."), *(Task->GetFName().ToString() ))
 		}
 
 		ActiveTask = nullptr;
@@ -271,7 +269,7 @@ void URAIManagerComponent::ReturnToInvokingTask(URAITaskComponent* CompletedTask
 	{
 		if (DebugLoggingEnabled)
 		{
-			UE_LOG(LogTemp, Display, TEXT("Task %s completed successfully, returning to invoking parent task %s"),
+			UE_LOG(LogRAI, Display, TEXT("Task %s completed successfully, returning to invoking parent task %s"),
 			       *(CompletedTask->GetClass()->GetName()), *(ParentTask->GetClass()->GetName()))
 		}
 
@@ -290,7 +288,7 @@ URAITaskComponent* URAIManagerComponent::UpdateTaskPriorities()
 	{
 		if (!Task)
 		{
-			UE_LOG(LogTemp, Error, TEXT("Task %s was removed from the AIController"),
+			UE_LOG(LogRAI, Error, TEXT("Task %s was removed from the AIController"),
 			       *(Task->GetFName().ToString() ))
 			continue;
 		}
@@ -351,11 +349,11 @@ bool URAIManagerComponent::CheckIfTaskShouldInterrupt(const URAITaskComponent* T
 
 	bool ShouldInterrupt = (InterruptingTask->GetPriority() - TaskToInterrupt->GetPriority()) > priorityGap;
 
-	if (DebugLoggingEnabled)
+	if (ShouldInterrupt && DebugLoggingEnabled)
 	{
 		URancUtilityLibrary::ThrottledLog(
 			FString("Task ") + InterruptingTask->GetFName().ToString() + FString(" should interrupt ") + TaskToInterrupt
-			->GetFName().ToString() + FString(" = ") + (ShouldInterrupt ? FString("true") : FString("false")), 3.f,
+			->GetFName().ToString() + FString(" = ") + FString("true"), 3.f,
 			FString("ShouldInterrupt"));
 	}
 

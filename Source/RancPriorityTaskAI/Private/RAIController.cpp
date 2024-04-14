@@ -3,6 +3,7 @@
 #include "RAIController.h"
 
 #include "GameplayTagContainer.h"
+#include "RAILogCategory.h"
 #include "RAIManagerComponent.h"
 #include "RAITaskComponent.h"
 #include "Perception/AIPerceptionComponent.h"
@@ -61,7 +62,7 @@ void ARAIController::TriggerCustom(TSubclassOf<URAITaskComponent> Task, FGamepla
 		}
 		else
 		{
-			UE_LOG(LogTemp, Warning, TEXT("TriggerCustom: Task not found: %s"), *Task->GetName());
+			UE_LOG(LogRAI, Warning, TEXT("TriggerCustom: Task not found: %s"), *Task->GetName());
 		}
 	}
 }
