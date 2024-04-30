@@ -154,11 +154,11 @@ void URAIManagerComponent::UpdateActiveTasks()
 		if (auto* Ancestor = ActiveTask->GetOldestInvokingAncestor())
 		{
 			// ancestor will trigger EndTask in all its children
-			Ancestor->EndTask(false, true);
+			Ancestor->EndTask(false, 0, true);
 		}
 		else
 		{
-			ActiveTask->EndTask(false, true);
+			ActiveTask->EndTask(false, 0, true);
 		}
 
 		OwningController->StopMovement();
@@ -216,7 +216,7 @@ void URAIManagerComponent::OnPerceptionStimulus(AActor* Actor, FAIStimulus Stimu
 {
 	for (URAITaskComponent* TaskComponent : AllTasks)
 	{
-		if (TaskComponent)
+		if (TaskComponent && TaskComponent->IsEnabled)
 		{
 			TaskComponent->OnPerceptionStimulus(Actor, Stimulus);
 		}
@@ -286,12 +286,11 @@ URAITaskComponent* URAIManagerComponent::UpdateTaskPriorities()
 
 	for (URAITaskComponent* Task : PrimaryTasks)
 	{
-		if (!Task)
+		if (!Task || !Task->IsEnabled)
 		{
-			UE_LOG(LogRAI, Error, TEXT("Task %s was removed from the AIController"),
-			       *(Task->GetFName().ToString() ))
 			continue;
 		}
+		
 
 		float Priority = Task->CalculatePriority();
 		Task->SetPriority(Priority);

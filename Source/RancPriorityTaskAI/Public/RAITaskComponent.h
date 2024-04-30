@@ -40,6 +40,11 @@ public:
 	//* Configuration
 	//*************************************************************************
 
+	/* Used to dynamically enable/disable the prioritization of this task.
+	 * A disabled task can still be invoked by other tasks.*/
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RAI|Status")
+	bool IsEnabled = true;
+	
 	/*  Whether a task is currently active/running */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Transient, Category = "RAI|Configuration")
 	bool IsPrimaryTask = true;
