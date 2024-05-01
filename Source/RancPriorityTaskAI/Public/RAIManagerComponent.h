@@ -10,6 +10,7 @@
 
 class URAITaskComponent;
 class APawn;
+class ACharacter;
 class ARAIController;
 class UCharacterMovementComponent;
 class UPawnMovementComponent;

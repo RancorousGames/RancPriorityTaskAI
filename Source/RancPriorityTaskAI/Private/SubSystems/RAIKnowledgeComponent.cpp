@@ -1,6 +1,7 @@
 ﻿// Copyright Rancorous Games, 2024
 
 #include "SubSystems/RAIKnowledgeComponent.h"
+#include "GameFramework/Actor.h"
 
 // Constructor
 URAIKnowledgeComponent::URAIKnowledgeComponent()
@@ -17,7 +18,7 @@ bool URAIKnowledgeComponent::HasRelation(AActor* Actor, FGameplayTag Relation)
         return false;
     }
 
-    for (const FRelationshipFact& Fact : RelationshipFacts[Actor].Data)
+    for (const FRelationshipFact& Fact : RelationshipFacts[Actor])
     {
         if (Fact.Relation == Relation)
         {
@@ -34,7 +35,7 @@ TArray<FRelationshipFact> URAIKnowledgeComponent::GetAllRelations(AActor* Actor)
     TArray<FRelationshipFact> Result;
     if (Actor && RelationshipFacts.Contains(Actor))
     {
-        Result = RelationshipFacts[Actor].Data;
+        Result = RelationshipFacts[Actor];
     }
     return Result;
 }
@@ -48,7 +49,7 @@ TArray<FRelationshipFact> URAIKnowledgeComponent::GetAllRelationsOfCategory(AAct
         return Result;
     }
 
-    for (const FRelationshipFact& Fact : RelationshipFacts[Actor].Data)
+    for (const FRelationshipFact& Fact : RelationshipFacts[Actor])
     {
         if (Fact.Category == Category)
         {
@@ -113,7 +114,7 @@ void URAIKnowledgeComponent::RemoveRelationMulticast_Implementation(AActor* Acto
 {
     if (Actor && RelationshipFacts.Contains(Actor))
     {
-        TArrayWrapper<FRelationshipFact>& Facts = RelationshipFacts[Actor];
+        TArray<FRelationshipFact>& Facts = RelationshipFacts[Actor];
         for (int32 Index = 0; Index < Facts.Num(); ++Index)
         {
             if (Facts[Index].Relation == Relation)
@@ -152,7 +153,7 @@ void URAIKnowledgeComponent::RemoveAllRelationsOfCategoryMulticast_Implementatio
 {
     if (Actor && RelationshipFacts.Contains(Actor))
     {
-        TArrayWrapper<FRelationshipFact>& Facts = RelationshipFacts[Actor];
+        TArray<FRelationshipFact>& Facts = RelationshipFacts[Actor];
         for (int32 Index = Facts.Num() - 1; Index >= 0; --Index)
         {
             if (Facts[Index].Category == Category)

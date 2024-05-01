@@ -5,7 +5,6 @@
 #include "CoreMinimal.h"
 #include "Components/ActorComponent.h"
 #include "GameplayTagContainer.h"
-#include "TArrayWrapper.h"
 
 #include "RAIKnowledgeComponent.generated.h"
 
@@ -43,7 +42,7 @@ public:
 
 protected:
     // Map storing relationship facts for each actor.
-    TMap<AActor*, TArrayWrapper<FRelationshipFact>> RelationshipFacts;
+    TMap<AActor*, TArray<FRelationshipFact>> RelationshipFacts;
 
 public:
     // Blueprint-accessible methods.

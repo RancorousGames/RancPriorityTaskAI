@@ -8,6 +8,7 @@
 #include "RAILogCategory.h"
 #include "TimerManager.h"
 #include "Math/UnrealMathUtility.h"
+#include "Engine/World.h"
 
 // Sets default values for this component's properties
 URAITaskComponent::URAITaskComponent()
