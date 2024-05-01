@@ -1,7 +1,7 @@
 {
 	"FileVersion": 3,
-	"Version": 5,
-	"VersionName": "1.2.4",
+	"Version": 3,
+	"VersionName": "1.2",
 	"FriendlyName": "Ranc Priority Task AI",
 	"Description": "An advanced and optimized task and priority based AI system",
 	"Category": "AI",
