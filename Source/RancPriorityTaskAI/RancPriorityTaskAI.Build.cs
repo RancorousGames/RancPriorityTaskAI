@@ -12,8 +12,7 @@ public class RancPriorityTaskAI : ModuleRules
 			new string[]
 			{
 				"Core",
-				"AIModule"
-				"RancUtilities"
+				"AIModule",
 				"AIModule",
 				"NavigationSystem"
 			}
@@ -27,7 +26,8 @@ public class RancPriorityTaskAI : ModuleRules
 				"Engine",
 				"Slate",
 				"SlateCore",
-				"GameplayTags"
+				"GameplayTags",
+				"Engine"
 				// ... add private dependencies that you statically link with here ...	
 			}
 			);
