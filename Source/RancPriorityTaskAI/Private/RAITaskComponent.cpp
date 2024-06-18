@@ -161,6 +161,11 @@ float URAITaskComponent::GetPriority() const
 	return Priority;
 }
 
+void URAITaskComponent::BeginTaskCore(const FRAITaskInvokeArguments& InvokeArguments)
+{
+	BeginTask(InvokeArguments);
+}
+
 void URAITaskComponent::Restart()
 {
 	if (DebugLoggingEnabled)
@@ -189,7 +194,7 @@ void URAITaskComponent::Restart()
 			}
 			
 			InterruptType = LoopPenaltySavedInterruptType;
-			BeginTask(InvokeArgs);
+			BeginTaskCore(InvokeArgs);
 		}
 		else
 		{
@@ -205,7 +210,7 @@ void URAITaskComponent::Restart()
 	}
 	else
 	{
-		BeginTask(InvokeArgs);
+		BeginTaskCore(InvokeArgs);
 	}
 }
 

@@ -171,7 +171,7 @@ void URAIManagerComponent::UpdateActiveTasks()
 void URAIManagerComponent::StartTask(URAITaskComponent* Task, FRAITaskInvokeArguments InvokeArguments)
 {
 	ActiveTask = Task;
-	Task->BeginTask(InvokeArguments);
+	Task->BeginTaskCore(InvokeArguments);
 
 	if (DebugLoggingEnabled)
 	{
