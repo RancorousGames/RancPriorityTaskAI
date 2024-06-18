@@ -112,11 +112,15 @@ public:
 	/*  This is called when the AIController OnPossess is called and it and ManagerComponent are both initialized */
 	UFUNCTION(BlueprintCallable, BlueprintNativeEvent, Category = RAI)
 	void Initialize(ACharacter* _Character, ARAIController* _OwnerController);
+
 	
-	/*  This is called by the manager component whenever we begin this task */
+	/*  This is called by the manager component whenever we begin this task, it will then call BeginTask  for blueprint implementations */
+	virtual void BeginTaskCore(const FRAITaskInvokeArguments& InvokeArguments = FRAITaskInvokeArguments());
+
 	UFUNCTION(BlueprintCallable, BlueprintNativeEvent, Category = RAI)
 	void BeginTask(const FRAITaskInvokeArguments& InvokeArguments = FRAITaskInvokeArguments());
 
+	
 	/*  This is called by the manager component whenever we begin this task ends */
 	UFUNCTION(BlueprintCallable, BlueprintNativeEvent, Category = RAI,
 		Meta = (SuccessToolTip = "Whether the task succeeded.", AdvancedDisplay = "WasInterrupted, BeginAgainCooldown",
