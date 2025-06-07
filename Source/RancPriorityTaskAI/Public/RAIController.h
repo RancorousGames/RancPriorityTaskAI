@@ -26,7 +26,8 @@ class RANCPRIORITYTASKAI_API ARAIController : public AAIController
 	GENERATED_BODY()
 
 public:
-	ARAIController();
+	ARAIController(const FObjectInitializer& ObjectInitializer): ManagerComponent(nullptr), AIPerceptionComponent(nullptr){}
+	ARAIController(): ManagerComponent(nullptr), AIPerceptionComponent(nullptr){}
 
 protected:
 	virtual void BeginPlay() override;
@@ -88,6 +89,53 @@ public:
 	/*  Whether the AI is enabled/disabled, set by calling SetRAIActive */
 	UFUNCTION(BlueprintCallable, Category = RAI)
 	bool IsRAIActive();
+
+	//~ Smooth Path AI Functions
+	//----------------------------------------------------------------------//
+protected:
+	/**
+	 * Overridden to intercept the movement request and generate a custom, curved path.
+	 * If the curve generation fails, it falls back to the parent AAIController's MoveTo logic.
+	 */
+	virtual FPathFollowingRequestResult MoveTo(const FAIMoveRequest& MoveRequest, FNavPathSharedPtr* OutPath = nullptr) override;
+
+	/**
+	 * The core function that generates the curved path. It creates a list of candidate points
+	 * and then validates and stitches path segments between them.
+	 * @param MoveRequest The original request from the behavior tree or game logic.
+	 * @return A valid, stitched path if successful, or a null pointer if it fails.
+	 */
+	FNavPathSharedPtr GenerateSmoothPath(const FAIMoveRequest& MoveRequest) const;
+
+private:
+	/**
+	 * A helper function to append a new path segment to an existing composite path.
+	 * @param InOutBasePath The path to be extended. This will be modified by appending points.
+	 * @param PathToAdd The new path segment to append.
+	 */
+	void StitchPathSegments(FNavPathSharedPtr& InOutBasePath, const FNavPathSharedPtr& PathToAdd) const;
+
+public:
+	//~ Smooth Path Configuration Parameters
+	//----------------------------------------------------------------------//
+
+	UPROPERTY(EditAnywhere, Category = "AI|Smooth Path")
+	bool bEnableSmoothPaths = false;
+	
+	UPROPERTY(EditAnywhere, Category = "AI|Smooth Path")
+    bool bDebugSmoothPath = false;
+	
+	/** The maximum angle (in degrees) the character can turn in a single path segment. Smaller values create wider, smoother curves. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "AI|Smooth Path", meta = (ClampMin = "5.0", ClampMax = "90.0"))
+	float CurveAngleThreshold = 45.0f;
+
+	/** The maximum number of segments to generate for the curve. Prevents infinite loops and performance issues in complex situations. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "AI|Smooth Path", meta = (ClampMin = "2", ClampMax = "20"))
+	int32 MaxCurveSegments = 8;
+
+	/** The minimum length for any generated curve segment. Prevents generating very small, twitchy segments. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "AI|Smooth Path", meta = (ClampMin = "50.0"))
+	float MinCurveSegmentLength = 100.0f;
 
 private:
 	
