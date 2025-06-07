@@ -13,8 +13,9 @@ public class RancPriorityTaskAI : ModuleRules
 			{
 				"Core",
 				"AIModule",
-				"RancUtilities"
-				// ... add other public dependencies that you statically link with here ...
+				"RancUtilities",
+				"AIModule",
+				"NavigationSystem"
 			}
 			);
 			
