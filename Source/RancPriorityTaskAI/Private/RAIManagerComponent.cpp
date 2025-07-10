@@ -50,9 +50,6 @@ void URAIManagerComponent::Initialize(ARAIController* Controller, APawn* Pawn)
 
 		for (URAITaskComponent* TaskComponent : AllTasks)
 		{
-			UClass* TaskClass = TaskComponent->GetClass();
-			TaskTypeToInstanceMap.Add(TaskClass, TaskComponent);
-
 			TaskComponent->ManagerComponent = this;
 			TaskComponent->DebugLoggingEnabled = DebugLoggingEnabled;
 			TaskComponent->MaxTaskLoopCount = MaxTaskLoopCount;
@@ -74,11 +71,14 @@ void URAIManagerComponent::Initialize(ARAIController* Controller, APawn* Pawn)
 
 URAITaskComponent* URAIManagerComponent::GetTaskByClass(TSubclassOf<URAITaskComponent> TaskClass) const
 {
-	if (URAITaskComponent* TaskComponent = TaskTypeToInstanceMap.FindRef(TaskClass))
+	for (URAITaskComponent* TaskComponent : AllTasks)
 	{
-		return TaskComponent;
+		if (TaskComponent && TaskComponent->IsA(TaskClass))
+		{
+			return TaskComponent;
+		}
 	}
-
+	
 	UE_LOG(LogRAI, Error, TEXT("Could not find task of class: %s, did you add the task to your AI?"),
 	       *(TaskClass->GetFName().ToString() ))
 

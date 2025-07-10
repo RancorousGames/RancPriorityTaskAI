@@ -62,9 +62,6 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Transient, Category = "RAI|Manager")
 	TArray<URAITaskComponent*> AllTasks = {};
 	
-	/* same elements as AllTasks but more efficient lookup */
-	TMap<TSubclassOf<URAITaskComponent>, URAITaskComponent*> TaskTypeToInstanceMap = {};
-	
 //*************************************************************************
 //* Configuration Variables
 //*************************************************************************
