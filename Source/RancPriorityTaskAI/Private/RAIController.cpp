@@ -11,6 +11,7 @@
 #include "Navigation/PathFollowingComponent.h"
 #include "GameFramework/Pawn.h"
 #include "VisualLogger/VisualLogger.h"
+#include "DrawDebugHelpers.h"
 
 class URAITaskComponent;
 class URAIManagerComponent;
