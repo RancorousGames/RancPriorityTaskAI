@@ -212,6 +212,17 @@ void URAIManagerComponent::ForceInterruptActiveTask(URAITaskComponent* AssumedAc
 	}
 }
 
+void URAIManagerComponent::TriggerCustomEvent(FGameplayTag Trigger, UObject* Payload)
+{
+	for (URAITaskComponent* TaskComponent : AllTasks)
+	{
+		if (TaskComponent && TaskComponent->IsEnabled)
+		{
+			TaskComponent->OnCustomTrigger(Trigger, Payload);
+		}
+	}
+}
+
 void URAIManagerComponent::OnPerceptionStimulus(AActor* Actor, FAIStimulus Stimulus)
 {
 	for (URAITaskComponent* TaskComponent : AllTasks)

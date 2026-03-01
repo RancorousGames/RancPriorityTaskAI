@@ -102,8 +102,9 @@ public:
 	//*************************************************************************
 
 	/* Called by ManagerComponent only for Primary tasks, no need to implement for invoked tasks */
-	UFUNCTION(BlueprintImplementableEvent, Category = RAI)
+	UFUNCTION(BlueprintNativeEvent, Category = RAI)
 	float CalculatePriority();
+	virtual float CalculatePriority_Implementation();
 
 	/*  Get the current priority of this task, if it is an invoked task it will return the priority of its oldest ancestor or 0 if not invoked */
 	UFUNCTION(BlueprintCallable, Category = RAI)
