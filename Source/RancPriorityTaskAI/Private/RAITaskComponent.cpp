@@ -148,6 +148,11 @@ void URAITaskComponent::OnCustomTrigger_Implementation(FGameplayTag Trigger, UOb
 {
 }
 
+float URAITaskComponent::CalculatePriority_Implementation()
+{
+	return 0.0f;
+}
+
 float URAITaskComponent::GetPriority() const
 {
 	if (!IsPrimaryTask)

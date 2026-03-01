@@ -131,6 +131,10 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "RAI|Manager")
 	void ForceInterruptActiveTask(URAITaskComponent* AssumedActiveTask);
 
+	/** Broadcasts a custom trigger to all tasks. */
+	UFUNCTION(BlueprintCallable, Category = "RAI|Manager")
+	void TriggerCustomEvent(FGameplayTag Trigger, UObject* Payload);
+
 	
 //*************************************************************************
 //* Only called from RAIManagerComponent or self
