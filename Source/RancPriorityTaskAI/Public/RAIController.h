@@ -39,8 +39,7 @@ public:
 //* Configuration
 //*************************************************************************
 
-	/* Max count of thoughts before old ones get deleted */
-	UPROPERTY(VisibleAnywhere,BlueprintReadOnly,Transient,Category = Configuration)
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RAI|Configuration")
 	int MaxThoughtMemoryCount = 30;
 
 	/* Whether the RAI system should handle forwarding sensory input  to tasks using the built in sensory system.

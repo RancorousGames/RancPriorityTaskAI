@@ -79,9 +79,11 @@ void URAITaskComponent::EndTask_Implementation(bool Success, float BeginAgainCoo
 
 bool URAITaskComponent::IsTaskReady()
 {
-	if (NextBeginCooldown <= 0 && Cooldown <= 0.0f || WorldTimeBegun <= 0.0f)
+	const bool bNoCooldownsConfigured = NextBeginCooldown <= 0.f && Cooldown <= 0.f;
+	const bool bNeverRunYet           = WorldTimeBegun <= 0.f;
+	if (bNoCooldownsConfigured || bNeverRunYet)
 	{
-		return true; //Either Cooldown is none, or we haven't done the task yet.
+		return true;
 	}
 
 	const float CurrentTime = GetWorld()->GetTimeSeconds();

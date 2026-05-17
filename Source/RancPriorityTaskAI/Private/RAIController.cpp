@@ -19,7 +19,7 @@ class URAIManagerComponent;
 // Define a log category for smooth path AI functionality
 DEFINE_LOG_CATEGORY_STATIC(LogSmoothPathAI, Log, All);
 
-inline void ARAIController::BeginPlay()
+void ARAIController::BeginPlay()
 {
 	Super::BeginPlay();
 	

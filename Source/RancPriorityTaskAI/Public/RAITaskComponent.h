@@ -45,8 +45,7 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RAI|Status")
 	bool IsEnabled = true;
 	
-	/*  Whether a task is currently active/running */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Transient, Category = "RAI|Configuration")
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "RAI|Configuration")
 	bool IsPrimaryTask = true;
 
 	/*  Time in seconds that must pass until the task can fire again. */
@@ -135,8 +134,9 @@ public:
 	UFUNCTION(BlueprintCallable, Category = RAI)
 	void Restart();
 
-	UFUNCTION(BlueprintImplementableEvent, Category = RAI)
+	UFUNCTION(BlueprintNativeEvent, Category = RAI)
 	void OnInvokedTaskCompleted(bool WasSuccessful);
+	virtual void OnInvokedTaskCompleted_Implementation(bool WasSuccessful) {}
 
 	/*  A Primary Task may invoke another task to perform something, e.g. a GetFood task might invoke a Hunt task */
 	UFUNCTION(BlueprintCallable, Category = RAI)

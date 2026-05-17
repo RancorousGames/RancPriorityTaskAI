@@ -14,12 +14,13 @@ public class RancPriorityTaskAI : ModuleRules
 				"Core",
 				"AIModule",
 				"RancUtilities",
-				"AIModule",
-				"NavigationSystem"
+				"NavigationSystem",
+				"GameplayTags",
+				"StructUtils",
 			}
 			);
-			
-		
+
+
 		PrivateDependencyModuleNames.AddRange(
 			new string[]
 			{
@@ -27,9 +28,6 @@ public class RancPriorityTaskAI : ModuleRules
 				"Engine",
 				"Slate",
 				"SlateCore",
-				"GameplayTags",
-				"Engine"
-				// ... add private dependencies that you statically link with here ...	
 			}
 			);
 	}
