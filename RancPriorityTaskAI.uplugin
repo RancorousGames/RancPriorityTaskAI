@@ -21,14 +21,15 @@
             "Type": "Runtime",
             "LoadingPhase": "PreDefault",
             "PlatformAllowList": [
-                "Win64",
-                "Mac",
-                "IOS",
-                "Android"
+                "Win64"
             ]
         }
     ],
     "Plugins": [
+        {
+            "Name": "RancUtilities",
+            "Enabled": true
+        },
         {
             "Name": "GameplayTagsEditor",
             "Enabled": true
