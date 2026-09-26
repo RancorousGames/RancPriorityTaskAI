@@ -69,6 +69,8 @@ public:
 	URAIMemoryComponent();
 
 	virtual void BeginPlay() override;
+	void SetConsolidationPaused(bool bPaused);
+	bool IsConsolidationPaused() const;
 
 	// ── Configuration ─────────────────────────────────────────────────────────
 
@@ -150,6 +152,7 @@ public:
 	TArray<FRAISemanticFact>   Semantic;
 
 private:
+	bool bConsolidationPaused = false;
 	void ConsolidateOrForget();
 
 	/** Returns 0..1 measuring how similar E is to the N most recent episodes. */

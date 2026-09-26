@@ -18,6 +18,35 @@ void URAIMemoryComponent::BeginPlay()
 		ConsolidationTimer, this,
 		&URAIMemoryComponent::OnConsolidationTick,
 		60.f, true);
+	if (bConsolidationPaused)
+	{
+		GetWorld()->GetTimerManager().PauseTimer(ConsolidationTimer);
+	}
+}
+
+void URAIMemoryComponent::SetConsolidationPaused(bool bPaused)
+{
+	bConsolidationPaused = bPaused;
+	if (UWorld* World = GetWorld())
+	{
+		if (bPaused)
+		{
+			World->GetTimerManager().PauseTimer(ConsolidationTimer);
+		}
+		else
+		{
+			World->GetTimerManager().UnPauseTimer(ConsolidationTimer);
+		}
+	}
+}
+
+bool URAIMemoryComponent::IsConsolidationPaused() const
+{
+	if (const UWorld* World = GetWorld())
+	{
+		return World->GetTimerManager().IsTimerPaused(ConsolidationTimer);
+	}
+	return bConsolidationPaused;
 }
 
 // ── Encoding ──────────────────────────────────────────────────────────────────
