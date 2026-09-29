@@ -10,6 +10,7 @@
 #include "Misc/AutomationTest.h"
 #include "UObject/StrongObjectPtr.h"
 #include "HAL/IConsoleManager.h"
+#include "HAL/PlatformTime.h"
 
 ARAITestController::ARAITestController(const FObjectInitializer& Initializer) : Super(Initializer)
 {
@@ -487,6 +488,46 @@ RAI_SAFETY_TEST(FRAINonCharacterTest, "Lifecycle.NonCharacterPawn")
 	TestTrue(TEXT("task receives generic pawn"), F.Root->Pawn == Pawn && F.Manager->Pawn == Pawn);
 	TestNull(TEXT("character cast optional"), F.Root->Character);
 	TestTrue(TEXT("arbitration runs for generic pawn"), F.Root->IsTaskActive);
+	return true;
+}
+
+RAI_SAFETY_TEST(FRAIExplanationTest, "Events.PriorityExplanationCaptured")
+{
+	FRAISafetyFixture F;
+	F.Manager->bCaptureExplanations = true;
+	bool Captured = false;
+	F.Manager->OnArbitrationNative.AddLambda([&Captured](const FRAIArbitrationResult& Result)
+	{
+		Captured = !Result.Candidates.IsEmpty() && Result.Candidates[0].Explanation.Terms.Num() == 1
+			&& Result.Candidates[0].Explanation.Terms[0].Name == FName(TEXT("Constant"));
+	});
+	F.Start();
+	TestTrue(TEXT("named priority terms delivered through arbitration"), Captured);
+	F.Manager->OnArbitrationNative.Clear();
+	return true;
+}
+
+RAI_SAFETY_TEST(FRAIPerfTest, "Perf.UpdateActiveTasks16Tasks")
+{
+	FRAISafetyFixture F;
+	F.Manager->Deinitialize();
+	F.Child->IsPrimaryTask = true;
+	F.Grandchild->IsPrimaryTask = true;
+	for (int32 Index = 0; Index < 13; ++Index)
+	{
+		URAITestTask* Task = NewObject<URAITestTask>(F.Controller);
+		F.Controller->AddInstanceComponent(Task);
+		Task->RegisterComponent();
+	}
+	F.Manager->Initialize(F.Controller, F.Controller->GetPawn());
+	TestEqual(TEXT("sixteen primary task benchmark"), F.Manager->PrimaryTasks.Num(), 16);
+	for (int32 Index = 0; Index < 100; ++Index) F.Start();
+	constexpr int32 Iterations = 10000;
+	const double Begin = FPlatformTime::Seconds();
+	for (int32 Index = 0; Index < Iterations; ++Index) F.Start();
+	const double Microseconds = (FPlatformTime::Seconds() - Begin) * 1000000.0 / Iterations;
+	AddInfo(FString::Printf(TEXT("16 native constant tasks, invariants enabled: %.3f us/update; budget 5 us, tolerance 15 us"), Microseconds));
+	TestTrue(TEXT("under three times the five-microsecond budget"), Microseconds < 15.0);
 	return true;
 }
 

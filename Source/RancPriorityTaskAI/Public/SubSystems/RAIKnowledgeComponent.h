@@ -32,17 +32,19 @@ struct FRelationshipFact
 /**
  * Actor Component for handling AI knowledge, focusing on relationships.
  */
-UCLASS(Blueprintable, BlueprintType, ClassGroup=(RAI), meta=(BlueprintSpawnableComponent))
+UCLASS(Blueprintable, BlueprintType, ClassGroup=(RAI), meta=(BlueprintSpawnableComponent, DeprecatedNode, DeprecationMessage="Legacy relationship store; use a mind/memory component for new cognition."))
 class RANCPRIORITYTASKAI_API URAIKnowledgeComponent : public UActorComponent
 {
     GENERATED_BODY()
 
 public:
     URAIKnowledgeComponent();
+    virtual void BeginPlay() override;
 
 protected:
     // Map storing relationship facts for each actor.
-    TMap<AActor*, TArray<FRelationshipFact>> RelationshipFacts;
+    TMap<TWeakObjectPtr<AActor>, TArray<FRelationshipFact>> RelationshipFacts;
+    void PruneInvalidActors();
 
 public:
     // Blueprint-accessible methods.
@@ -58,28 +60,41 @@ public:
     UFUNCTION(BlueprintCallable, Category = "Knowledge|Relationships")
     void AddRelation(AActor* Actor, const FRelationshipFact& RelationshipFact);
 
-    UFUNCTION(NetMulticast, Reliable)
+    UFUNCTION(BlueprintCallable, Category="Knowledge|Relationships", meta=(DeprecatedFunction, DeprecationMessage="Local authority-only wrapper; does not replicate."))
     void AddRelationMulticast(AActor* Actor, const FRelationshipFact& RelationshipFact);
 
-    UFUNCTION(Server, Reliable)
+    UFUNCTION(BlueprintCallable, Category="Knowledge|Relationships", meta=(DeprecatedFunction, DeprecationMessage="Local authority-only wrapper; does not replicate."))
     void ServerAddRelation(AActor* Actor, const FRelationshipFact& RelationshipFact);
 
     UFUNCTION(BlueprintCallable, Category = "Knowledge|Relationships")
     void RemoveRelation(AActor* Actor, FGameplayTag Relation);
 
-    UFUNCTION(NetMulticast, Reliable)
+    UFUNCTION(BlueprintCallable, Category="Knowledge|Relationships", meta=(DeprecatedFunction, DeprecationMessage="Local authority-only wrapper; does not replicate."))
     void RemoveRelationMulticast(AActor* Actor, FGameplayTag Relation);
 
-    UFUNCTION(Server, Reliable)
+    UFUNCTION(BlueprintCallable, Category="Knowledge|Relationships", meta=(DeprecatedFunction, DeprecationMessage="Local authority-only wrapper; does not replicate."))
     void ServerRemoveRelation(AActor* Actor, FGameplayTag Relation);
 
     UFUNCTION(BlueprintCallable, Category = "Knowledge|Relationships")
     void RemoveAllRelationsOfCategory(AActor* Actor, FGameplayTag Category);
 
-    UFUNCTION(NetMulticast, Reliable)
+    UFUNCTION(BlueprintCallable, Category="Knowledge|Relationships", meta=(DeprecatedFunction, DeprecationMessage="Local authority-only wrapper; does not replicate."))
     void RemoveAllRelationsOfCategoryMulticast(AActor* Actor, FGameplayTag Category);
 
-    UFUNCTION(Server, Reliable)
+    UFUNCTION(BlueprintCallable, Category="Knowledge|Relationships", meta=(DeprecatedFunction, DeprecationMessage="Local authority-only wrapper; does not replicate."))
     void ServerRemoveAllRelationsOfCategory(AActor* Actor, FGameplayTag Category);
+
+    UE_DEPRECATED(5.8, "Use AddRelation; legacy replication is unsupported.")
+    virtual void AddRelationMulticast_Implementation(AActor* Actor, const FRelationshipFact& Fact) { AddRelation(Actor, Fact); }
+    UE_DEPRECATED(5.8, "Use AddRelation; legacy replication is unsupported.")
+    virtual void ServerAddRelation_Implementation(AActor* Actor, const FRelationshipFact& Fact) { AddRelation(Actor, Fact); }
+    UE_DEPRECATED(5.8, "Use RemoveRelation; legacy replication is unsupported.")
+    virtual void RemoveRelationMulticast_Implementation(AActor* Actor, FGameplayTag Relation) { RemoveRelation(Actor, Relation); }
+    UE_DEPRECATED(5.8, "Use RemoveRelation; legacy replication is unsupported.")
+    virtual void ServerRemoveRelation_Implementation(AActor* Actor, FGameplayTag Relation) { RemoveRelation(Actor, Relation); }
+    UE_DEPRECATED(5.8, "Use RemoveAllRelationsOfCategory; legacy replication is unsupported.")
+    virtual void RemoveAllRelationsOfCategoryMulticast_Implementation(AActor* Actor, FGameplayTag Category) { RemoveAllRelationsOfCategory(Actor, Category); }
+    UE_DEPRECATED(5.8, "Use RemoveAllRelationsOfCategory; legacy replication is unsupported.")
+    virtual void ServerRemoveAllRelationsOfCategory_Implementation(AActor* Actor, FGameplayTag Category) { RemoveAllRelationsOfCategory(Actor, Category); }
 
 };

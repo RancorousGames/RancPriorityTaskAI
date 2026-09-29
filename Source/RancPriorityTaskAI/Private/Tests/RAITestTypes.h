@@ -35,6 +35,7 @@ public:
 	TFunction<void()> OnEnd;
 	TFunction<void()> OnCompleted;
 	virtual float NativeCalculatePriority() override { return Score; }
+	virtual void DescribePriority(FRAIPriorityExplanation& Out) const override { Out.Add(TEXT("Constant"), Score); }
 	virtual void NativeBeginTask(const FRAITaskInvokeArguments&) override
 	{
 		++Begins;

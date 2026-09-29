@@ -2,170 +2,63 @@
 
 #include "SubSystems/RAIKnowledgeComponent.h"
 #include "GameFramework/Actor.h"
+#include "RAILogCategory.h"
 
-// Constructor
-URAIKnowledgeComponent::URAIKnowledgeComponent()
+URAIKnowledgeComponent::URAIKnowledgeComponent() { PrimaryComponentTick.bCanEverTick = false; }
+void URAIKnowledgeComponent::BeginPlay()
 {
-    PrimaryComponentTick.bCanEverTick = false;
-    // Initialization code here, if needed
+    Super::BeginPlay();
+    UE_LOG(LogRAI, Warning, TEXT("RAIKnowledgeComponent is deprecated; relationships are local authority-only data."));
 }
-
-// Checks if a specific relation exists for an actor
+void URAIKnowledgeComponent::PruneInvalidActors()
+{
+    for (auto It = RelationshipFacts.CreateIterator(); It; ++It)
+        if (!It.Key().IsValid()) It.RemoveCurrent();
+}
 bool URAIKnowledgeComponent::HasRelation(AActor* Actor, FGameplayTag Relation)
 {
-    if (!Actor || !RelationshipFacts.Contains(Actor))
-    {
-        return false;
-    }
-
-    for (const FRelationshipFact& Fact : RelationshipFacts[Actor])
-    {
-        if (Fact.Relation == Relation)
-        {
-            return true;
-        }
-    }
-
+    for (const FRelationshipFact& Fact : GetAllRelations(Actor))
+        if (Fact.Relation == Relation) return true;
     return false;
 }
-
-// Retrieves all relations for a given actor
 TArray<FRelationshipFact> URAIKnowledgeComponent::GetAllRelations(AActor* Actor)
 {
-    TArray<FRelationshipFact> Result;
-    if (Actor && RelationshipFacts.Contains(Actor))
-    {
-        Result = RelationshipFacts[Actor];
-    }
-    return Result;
+    PruneInvalidActors();
+    const TArray<FRelationshipFact>* Facts = RelationshipFacts.Find(Actor);
+    return IsValid(Actor) && Facts ? *Facts : TArray<FRelationshipFact>{};
 }
-
-// Retrieves all relations of a specific category for a given actor
 TArray<FRelationshipFact> URAIKnowledgeComponent::GetAllRelationsOfCategory(AActor* Actor, FGameplayTag Category)
 {
     TArray<FRelationshipFact> Result;
-    if (!Actor || !RelationshipFacts.Contains(Actor))
-    {
-        return Result;
-    }
-
-    for (const FRelationshipFact& Fact : RelationshipFacts[Actor])
-    {
-        if (Fact.Category == Category)
-        {
-            Result.Add(Fact);
-        }
-    }
-
+    for (const FRelationshipFact& Fact : GetAllRelations(Actor))
+        if (Fact.Category == Category) Result.Add(Fact);
     return Result;
 }
-
-// Adds a new relation for an actor
-void URAIKnowledgeComponent::AddRelation(AActor* Actor, const FRelationshipFact& RelationshipFact)
+void URAIKnowledgeComponent::AddRelation(AActor* Actor, const FRelationshipFact& Fact)
 {
-    if (Actor)
-    {
-        if (GetOwner()->HasAuthority())
-        {
-            // Directly update on the server
-            AddRelationMulticast(Actor, RelationshipFact);
-        }
-        else
-        {
-            // Call the server function to replicate
-            ServerAddRelation(Actor, RelationshipFact);
-        }
-    }
+    PruneInvalidActors();
+    if (IsValid(Actor) && GetOwner() && GetOwner()->HasAuthority()) RelationshipFacts.FindOrAdd(Actor).Add(Fact);
 }
-
-// Replicates the addition of a new relation to all clients
-void URAIKnowledgeComponent::AddRelationMulticast_Implementation(AActor* Actor, const FRelationshipFact& RelationshipFact)
-{
-    if (Actor)
-    {
-        RelationshipFacts.FindOrAdd(Actor).Add(RelationshipFact);
-    }
-}
-
-// Server RPC to add a new relation
-void URAIKnowledgeComponent::ServerAddRelation_Implementation(AActor* Actor, const FRelationshipFact& RelationshipFact)
-{
-    AddRelationMulticast(Actor, RelationshipFact);
-}
-
-// Removes a specific relation for an actor
 void URAIKnowledgeComponent::RemoveRelation(AActor* Actor, FGameplayTag Relation)
 {
-    if (Actor)
+    PruneInvalidActors();
+    if (!IsValid(Actor) || !GetOwner() || !GetOwner()->HasAuthority()) return;
+    if (TArray<FRelationshipFact>* Facts = RelationshipFacts.Find(Actor))
     {
-        if (GetOwner()->HasAuthority())
-        {
-            RemoveRelationMulticast(Actor, Relation);
-        }
-        else
-        {
-            ServerRemoveRelation(Actor, Relation);
-        }
+        const int32 Index = Facts->IndexOfByPredicate([Relation](const FRelationshipFact& Fact) { return Fact.Relation == Relation; });
+        if (Index != INDEX_NONE) Facts->RemoveAt(Index);
     }
 }
-
-// Replicates the removal of a relation to all clients
-void URAIKnowledgeComponent::RemoveRelationMulticast_Implementation(AActor* Actor, FGameplayTag Relation)
-{
-    if (Actor && RelationshipFacts.Contains(Actor))
-    {
-        TArray<FRelationshipFact>& Facts = RelationshipFacts[Actor];
-        for (int32 Index = 0; Index < Facts.Num(); ++Index)
-        {
-            if (Facts[Index].Relation == Relation)
-            {
-                Facts.RemoveAt(Index);
-                break;
-            }
-        }
-    }
-}
-
-// Server RPC to remove a relation
-void URAIKnowledgeComponent::ServerRemoveRelation_Implementation(AActor* Actor, FGameplayTag Relation)
-{
-    RemoveRelationMulticast(Actor, Relation);
-}
-
-// Removes all relations of a specific category for an actor
 void URAIKnowledgeComponent::RemoveAllRelationsOfCategory(AActor* Actor, FGameplayTag Category)
 {
-    if (Actor)
-    {
-        if (GetOwner()->HasAuthority())
-        {
-            RemoveAllRelationsOfCategoryMulticast(Actor, Category);
-        }
-        else
-        {
-            ServerRemoveAllRelationsOfCategory(Actor, Category);
-        }
-    }
+    PruneInvalidActors();
+    if (!IsValid(Actor) || !GetOwner() || !GetOwner()->HasAuthority()) return;
+    if (TArray<FRelationshipFact>* Facts = RelationshipFacts.Find(Actor))
+        Facts->RemoveAll([Category](const FRelationshipFact& Fact) { return Fact.Category == Category; });
 }
-
-// Replicates the removal of all relations of a category to all clients
-void URAIKnowledgeComponent::RemoveAllRelationsOfCategoryMulticast_Implementation(AActor* Actor, FGameplayTag Category)
-{
-    if (Actor && RelationshipFacts.Contains(Actor))
-    {
-        TArray<FRelationshipFact>& Facts = RelationshipFacts[Actor];
-        for (int32 Index = Facts.Num() - 1; Index >= 0; --Index)
-        {
-            if (Facts[Index].Category == Category)
-            {
-                Facts.RemoveAt(Index);
-            }
-        }
-    }
-}
-
-// Server RPC to remove all relations of a category
-void URAIKnowledgeComponent::ServerRemoveAllRelationsOfCategory_Implementation(AActor* Actor, FGameplayTag Category)
-{
-    RemoveAllRelationsOfCategoryMulticast(Actor, Category);
-}
+void URAIKnowledgeComponent::AddRelationMulticast(AActor* Actor, const FRelationshipFact& Fact) { AddRelation(Actor, Fact); }
+void URAIKnowledgeComponent::ServerAddRelation(AActor* Actor, const FRelationshipFact& Fact) { AddRelation(Actor, Fact); }
+void URAIKnowledgeComponent::RemoveRelationMulticast(AActor* Actor, FGameplayTag Relation) { RemoveRelation(Actor, Relation); }
+void URAIKnowledgeComponent::ServerRemoveRelation(AActor* Actor, FGameplayTag Relation) { RemoveRelation(Actor, Relation); }
+void URAIKnowledgeComponent::RemoveAllRelationsOfCategoryMulticast(AActor* Actor, FGameplayTag Category) { RemoveAllRelationsOfCategory(Actor, Category); }
+void URAIKnowledgeComponent::ServerRemoveAllRelationsOfCategory(AActor* Actor, FGameplayTag Category) { RemoveAllRelationsOfCategory(Actor, Category); }

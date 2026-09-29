@@ -13,8 +13,6 @@ void URAIMindComponent::BeginPlay()
 {
 	Super::BeginPlay();
 
-	// Resolve the sibling URAIMemoryComponent that should have been created
-	// alongside this one via CreateDefaultSubobject in the controller.
 	if (!Memory)
 	{
 		Memory = GetOwner()->FindComponentByClass<URAIMemoryComponent>();
@@ -23,13 +21,19 @@ void URAIMindComponent::BeginPlay()
 	// Wire sub-components to the event bus.
 	if (Memory)
 	{
-		OnLifeEvent.AddDynamic(Memory, &URAIMemoryComponent::EncodeEpisodic);
+		OnLifeEvent.AddUniqueDynamic(Memory, &URAIMemoryComponent::EncodeEpisodic);
 	}
+}
+
+void URAIMindComponent::EndPlay(const EEndPlayReason::Type Reason)
+{
+	if (Memory) OnLifeEvent.RemoveDynamic(Memory, &URAIMemoryComponent::EncodeEpisodic);
+	Super::EndPlay(Reason);
 }
 
 void URAIMindComponent::Witness(FRAILifeEvent Event)
 {
-	Event.WorldTime = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.f;
+	Event.WorldTime = TimeSource ? TimeSource->Now() : (Memory ? Memory->GetNow() : (GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0));
 	OnLifeEvent.Broadcast(Event);
 }
 

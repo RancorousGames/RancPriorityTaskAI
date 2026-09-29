@@ -4,6 +4,7 @@
 #include "CoreMinimal.h"
 #include "Components/ActorComponent.h"
 #include "Mind/RAILifeEvent.h"
+#include "RAIScheduling.h"
 #include "RAIMindComponent.generated.h"
 
 class URAIMemoryComponent;
@@ -24,8 +25,7 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FRAILifeEventDelegate, const FRAILif
  * — memories, mood shifts, relationship updates — flows from there via
  * OnLifeEvent. Tasks never write to sub-components directly.
  *
- * Lives on ARAIController. Attach it and its children there via
- * CreateDefaultSubobject in AWTAIController's constructor.
+ * Owner-agnostic: attach this and its sibling memory component to any actor.
  */
 UCLASS(ClassGroup=(RAI), meta=(BlueprintSpawnableComponent))
 class RANCPRIORITYTASKAI_API URAIMindComponent : public UActorComponent
@@ -36,10 +36,11 @@ public:
 	URAIMindComponent();
 
 	virtual void BeginPlay() override;
+	virtual void EndPlay(const EEndPlayReason::Type Reason) override;
+	void SetTimeSource(TSharedPtr<IRAITimeSource> InTimeSource) { TimeSource = MoveTemp(InTimeSource); }
 
 	// ── Sub-components ────────────────────────────────────────────────────────
-	// Each is a sibling component on the owning controller, not a child object.
-	// Populated during AWTAIController::BeginPlay (or via CreateDefaultSubobject).
+	// Resolved from sibling components during BeginPlay when not explicitly assigned.
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="RAI|Mind")
 	TObjectPtr<URAIMemoryComponent> Memory;
@@ -73,4 +74,6 @@ public:
 	/** True if this NPC knows Subject→Predicate as a semantic fact. */
 	UFUNCTION(BlueprintCallable, Category="RAI|Mind")
 	bool Knows(FGameplayTag Subject, FGameplayTag Predicate) const;
+private:
+	TSharedPtr<IRAITimeSource> TimeSource;
 };

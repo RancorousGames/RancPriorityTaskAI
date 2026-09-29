@@ -345,7 +345,7 @@ void URAIManagerComponent::UpdateActiveTasks()
 	Result.Time = GetNow();
 	Result.PreviousRoot = ActiveTask ? ActiveTask->GetRootTask() : nullptr;
 	float BestScore = TaskThreshold;
-	const bool Capture = OnArbitration.IsBound() || OnArbitrationNative.IsBound() || bForceArbitrationEvent;
+	const bool Capture = OnArbitration.IsBound() || OnArbitrationNative.IsBound() || bForceArbitrationEvent || bCaptureExplanations;
 	TArray<URAITaskComponent*, TInlineAllocator<32>> Tasks;
 	Tasks.Append(PrimaryTasks);
 	for (URAITaskComponent* Task : Tasks)
@@ -489,7 +489,7 @@ bool URAIManagerComponent::ValidateInvariants() const
 {
 #if !UE_BUILD_SHIPPING
 	if (!bCheckInvariants || bDeinitializing || OperationDepth) return true;
-	TSet<const URAITaskComponent*> Chain;
+	TArray<const URAITaskComponent*, TInlineAllocator<8>> Chain;
 	const URAITaskComponent* Cursor = ActiveTask;
 	const URAITaskComponent* Child = nullptr;
 	bool Valid = true;

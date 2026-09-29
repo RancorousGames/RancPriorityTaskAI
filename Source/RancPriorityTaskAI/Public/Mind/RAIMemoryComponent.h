@@ -5,6 +5,7 @@
 #include "Components/ActorComponent.h"
 #include "GameplayTagContainer.h"
 #include "Mind/RAILifeEvent.h"
+#include "RAIScheduling.h"
 #include "RAIMemoryComponent.generated.h"
 
 /**
@@ -27,7 +28,7 @@ struct RANCPRIORITYTASKAI_API FRAIEpisodicMemory
 	/** Retention erosion. Drops with age, resets on recall. */
 	UPROPERTY(BlueprintReadOnly, Category="RAI|Memory") float              Confidence = 1.f;
 	UPROPERTY(BlueprintReadOnly, Category="RAI|Memory") int32              RecallCount      = 0;
-	UPROPERTY(BlueprintReadOnly, Category="RAI|Memory") float              LastRecalledTime = 0.f;
+	UPROPERTY(BlueprintReadOnly, Category="RAI|Memory") double             LastRecalledTime = 0.0;
 
 	/** Consolidated memories survive the working-set cap and decay much slower. */
 	UPROPERTY(BlueprintReadOnly, Category="RAI|Memory") bool               bConsolidated   = false;
@@ -52,15 +53,15 @@ struct RANCPRIORITYTASKAI_API FRAISemanticFact
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="RAI|Memory") TWeakObjectPtr<AActor> LearnedFrom; // null = innate
 };
 
-/**
- * URAIMemoryComponent — stores episodic and semantic memories for one NPC.
- *
- * Lives on ARAIController as a child of URAIMindComponent.
- * Tasks and other mind components call Recall(), ValenceTowards(), Knows() etc.
- * to read memory; only the mind's OnLifeEvent pipeline writes to it.
- *
- * See MIND_DESIGN.md §3 for the full design.
- */
+UENUM(BlueprintType)
+enum class ERAIFactMergePolicy : uint8
+{
+	BlendConfidence,
+	Replace,
+	KeepHigherConfidence
+};
+
+/** Owner-agnostic episodic and semantic storage; attach alongside a mind on any actor. */
 UCLASS(ClassGroup=(RAI), meta=(BlueprintSpawnableComponent))
 class RANCPRIORITYTASKAI_API URAIMemoryComponent : public UActorComponent
 {
@@ -69,6 +70,9 @@ public:
 	URAIMemoryComponent();
 
 	virtual void BeginPlay() override;
+	virtual void EndPlay(const EEndPlayReason::Type Reason) override;
+	void SetServices(TSharedPtr<IRAITimeSource> Time, TSharedPtr<IRAIScheduler> InScheduler);
+	double GetNow() const;
 	void SetConsolidationPaused(bool bPaused);
 	bool IsConsolidationPaused() const;
 
@@ -77,12 +81,16 @@ public:
 	/** Max short-term episodes before consolidation/forgetting runs. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="RAI|Memory")
 	int32 WorkingSetCap = 60;
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="RAI|Memory", meta=(ClampMin="0"))
+	int32 LongTermCap = 240;
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="RAI|Memory", meta=(ClampMin="0", ClampMax="1"))
+	float FactConfidenceBlend = 0.3f;
 
 	/** Half-life of unconsolidated memories in game-time seconds. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="RAI|Memory")
 	float EpisodicShortHalfLife = 600.f;
 
-	/** Half-life of consolidated memories in game-time seconds (~1 game day). */
+	/** Half-life of consolidated memories in time-source seconds. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="RAI|Memory")
 	float EpisodicLongHalfLife = 86400.f;
 
@@ -97,8 +105,9 @@ public:
 	UFUNCTION()
 	void EncodeEpisodic(const FRAILifeEvent& Event);
 
-	/** Add or update a semantic fact. */
+	/** Default merge stores new value/source and blends confidence with FactConfidenceBlend. */
 	void LearnFact(FRAISemanticFact Fact);
+	void LearnFact(FRAISemanticFact Fact, ERAIFactMergePolicy Policy);
 
 	// ── Read ──────────────────────────────────────────────────────────────────
 
@@ -107,6 +116,9 @@ public:
 	 */
 	UFUNCTION(BlueprintCallable, Category="RAI|Memory")
 	TArray<FRAIEpisodicMemory> Recall(const FGameplayTagQuery& Query, int32 MaxResults = 8) const;
+	/** Indices remain valid only until storage is mutated. MaxResults <= 0 returns all matches. */
+	TArray<int32> RecallRefs(const FGameplayTagQuery& Query, int32 MaxResults = 8) const;
+	TArray<int32> RecallAboutRefs(AActor* Subject, FGameplayTag KindFilter = {}, int32 MaxResults = 8) const;
 
 	/** Episodes about a specific actor. Optionally filter by event Kind. */
 	UFUNCTION(BlueprintCallable, Category="RAI|Memory")
@@ -158,6 +170,13 @@ private:
 	/** Returns 0..1 measuring how similar E is to the N most recent episodes. */
 	float SimilarityToRecentEpisodes(const FRAILifeEvent& E, int32 N = 5) const;
 
-	FTimerHandle ConsolidationTimer;
+	TSharedPtr<IRAITimeSource> TimeSource;
+	TSharedPtr<IRAIScheduler> Scheduler;
+	FRAIScheduleHandle ConsolidationTimer;
+	double ConsolidationDue = 0.0;
+	double ConsolidationRemaining = 60.0;
+	void ScheduleConsolidation();
+	float ConfidenceAt(const FRAIEpisodicMemory& Memory, double Now) const;
+	TArray<int32> RankMatches(TFunctionRef<bool(const FRAIEpisodicMemory&)> Matches, int32 MaxResults) const;
 	void OnConsolidationTick();
 };

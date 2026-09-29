@@ -175,6 +175,8 @@ public:
 	UFUNCTION(BlueprintPure, Category = "RAI|Manager") URAITaskComponent* GetActiveTask() const { return ActiveTask; }
 	const TArray<URAITaskComponent*>& GetAllTasks() const { return AllTasks; }
 	const TArray<URAITaskComponent*>& GetPrimaryTasks() const { return PrimaryTasks; }
+	UFUNCTION(BlueprintPure, Category = "RAI|Manager") ARAIController* GetOwningController() const { return OwningController; }
+	UFUNCTION(BlueprintPure, Category = "RAI|Manager") APawn* GetControlledPawn() const { return Pawn; }
 	bool ValidateInvariants() const;
 	void SetServices(TSharedPtr<IRAITimeSource> Time, TSharedPtr<IRAIScheduler> Scheduler);
 	double GetNow() const;

@@ -84,7 +84,7 @@ struct RANCPRIORITYTASKAI_API FRAILifeEvent
 
 	/** Filled by URAIMindComponent::Witness() — do not set manually. */
 	UPROPERTY(BlueprintReadOnly, Category="RAI|Mind")
-	float WorldTime = 0.f;
+	double WorldTime = 0.0;
 
 	// ── Helpers ───────────────────────────────────────────────────────────────
 

@@ -244,6 +244,12 @@ public:
 
 	UFUNCTION(BlueprintPure, Category = RAI)
 	ERAITaskRunState GetRunState() const { return RunState; }
+	UFUNCTION(BlueprintPure, Category = RAI)
+	URAIManagerComponent* GetManager() const { return ManagerComponent; }
+	UFUNCTION(BlueprintPure, Category = RAI)
+	ARAIController* GetOwnerController() const { return OwnerController; }
+	UFUNCTION(BlueprintPure, Category = RAI)
+	APawn* GetControlledPawn() const { return Pawn; }
 
 	/* Outcome reason of this task's last end. */
 	UFUNCTION(BlueprintPure, Category = RAI)
