@@ -19,6 +19,8 @@ class URAIManagerComponent;
 // Define a log category for smooth path AI functionality
 DEFINE_LOG_CATEGORY_STATIC(LogSmoothPathAI, Log, All);
 
+ARAIController::ARAIController(const FObjectInitializer& Initializer) : Super(Initializer) {}
+
 void ARAIController::BeginPlay()
 {
 	Super::BeginPlay();
@@ -36,12 +38,14 @@ void ARAIController::BeginPlay()
 			}
 		}
 	
-		AIPerceptionComponent->OnTargetPerceptionUpdated.AddDynamic(this, &ARAIController::OnPerceptionUpdated);
+		if (AIPerceptionComponent && bRAIActive)
+			AIPerceptionComponent->OnTargetPerceptionUpdated.AddUniqueDynamic(this, &ARAIController::OnPerceptionUpdated);
 	}
 }
 
 void ARAIController::TraceThought(FString Thought)
 {
+    if (!bTraceThoughts) return;
     Thoughts.Add(Thought);
 	OnThoughtTrace.Broadcast(Thought);
 
@@ -49,7 +53,7 @@ void ARAIController::TraceThought(FString Thought)
 	if (Thoughts.Num() > MaxThoughtMemoryCount)
 	{
 		// Calculate the number of thoughts to remove
-		int32 ThoughtsToRemove = Thoughts.Num() - MaxThoughtMemoryCount;
+		int32 ThoughtsToRemove = Thoughts.Num() - FMath::Max(MaxThoughtMemoryCount, 0);
 
 		// Remove the older half of thoughts
 		Thoughts.RemoveAt(0, ThoughtsToRemove);
@@ -75,24 +79,21 @@ void ARAIController::TriggerCustomAll(FGameplayTag Trigger, UObject* Payload)
 {
 	if (ManagerComponent)
 	{
-		for (auto* Task : ManagerComponent->AllTasks)
-		{
-			Task->OnCustomTrigger(Trigger, Payload);
-		}
+		ManagerComponent->TriggerCustomEvent(Trigger, Payload);
 	}
 }
 
 void ARAIController::SetRAIActive(bool ShouldBeActive)
 {
 	bRAIActive = ShouldBeActive;
-	ManagerComponent->SetActive(ShouldBeActive);
+	if (ManagerComponent) ManagerComponent->SetActive(ShouldBeActive);
 
 	TraceThought(FString("RAI set to: ") + (ShouldBeActive ? "Active" : "Inactive"));
-	if (ShouldBeActive)
+	if (AIPerceptionComponent && ShouldBeActive)
 	{
-		AIPerceptionComponent->OnTargetPerceptionUpdated.AddDynamic(this, &ARAIController::OnPerceptionUpdated);
+		AIPerceptionComponent->OnTargetPerceptionUpdated.AddUniqueDynamic(this, &ARAIController::OnPerceptionUpdated);
 	}
-	else
+	else if (AIPerceptionComponent)
 	{
 		AIPerceptionComponent->OnTargetPerceptionUpdated.RemoveDynamic(this, &ARAIController::OnPerceptionUpdated);
 	}
@@ -124,6 +125,12 @@ void ARAIController::OnPerceptionUpdated(AActor* Actor, FAIStimulus Stimulus)
 	{
 		ManagerComponent->OnPerceptionStimulus(Actor, Stimulus);
 	}
+}
+
+void ARAIController::OnUnPossess()
+{
+	if (ManagerComponent) ManagerComponent->Deinitialize();
+	Super::OnUnPossess();
 }
 
 //~ Smooth Path AI Implementation

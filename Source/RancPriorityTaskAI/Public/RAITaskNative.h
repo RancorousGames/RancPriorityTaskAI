@@ -56,4 +56,6 @@ protected:
 	virtual void  OnPerceptionStimulus_Implementation(AActor* Actor, FAIStimulus Stimulus) override final;
 	virtual void  OnCustomTrigger_Implementation(FGameplayTag Trigger, UObject* Payload) override final;
 	virtual void  OnInvokedTaskCompleted_Implementation(bool WasSuccessful) override final;
+private:
+	bool bDispatchingEnd = false;
 };

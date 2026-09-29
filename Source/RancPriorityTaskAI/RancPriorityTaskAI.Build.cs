@@ -16,7 +16,8 @@ public class RancPriorityTaskAI : ModuleRules
 				"RancUtilities",
 				"NavigationSystem",
 				"GameplayTags",
-				"StructUtils",
+				"CoreUObject",
+				"Engine",
 			}
 			);
 
@@ -24,8 +25,6 @@ public class RancPriorityTaskAI : ModuleRules
 		PrivateDependencyModuleNames.AddRange(
 			new string[]
 			{
-				"CoreUObject",
-				"Engine",
 				"Slate",
 				"SlateCore",
 			}

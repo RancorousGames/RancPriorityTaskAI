@@ -3,12 +3,15 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "RAIDataStructures.h"
+#include "RAIScheduling.h"
 #include "RAITaskinvokeArguments.h"
 #include "Components/ActorComponent.h"
 #include "Perception/AIPerceptionTypes.h"
 #include "RAIManagerComponent.generated.h"
 
 class URAITaskComponent;
+class URAIInterruptPolicy;
 class APawn;
 class ACharacter;
 class ARAIController;
@@ -16,6 +19,15 @@ class UCharacterMovementComponent;
 class UPawnMovementComponent;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FUtilityTaskEvent, URAITaskComponent*, Task);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_FourParams(FRAITaskEndEvent, URAITaskComponent*, Task, bool, Success, FGameplayTag, Reason, bool, WasInterrupted);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FRAIArbitrationEvent, const FRAIArbitrationResult&, Result);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_ThreeParams(FRAIInvokeRejectedEvent, URAITaskComponent*, Parent, TSubclassOf<URAITaskComponent>, TaskClass, ERAIInvokeRejectReason, Reason);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_ThreeParams(FRAILoopEvent, URAITaskComponent*, Task, int32, Count, double, Window);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FRAIReevaluationEvent, FGameplayTag, Reason);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FRAIInvariantEvent, const FString&, Message);
+DECLARE_MULTICAST_DELEGATE_OneParam(FRAINativeTaskBegin, URAITaskComponent*);
+DECLARE_MULTICAST_DELEGATE_FourParams(FRAINativeTaskEnd, URAITaskComponent*, bool, FGameplayTag, bool);
+DECLARE_MULTICAST_DELEGATE_OneParam(FRAINativeArbitration, const FRAIArbitrationResult&);
 
 /*
 Determines which tasks are the best to do.
@@ -32,6 +44,7 @@ public:
 protected:
 
 	virtual void BeginPlay() override;
+	virtual void EndPlay(const EEndPlayReason::Type Reason) override;
 	
 public:
 
@@ -44,6 +57,16 @@ public:
 	
 	UPROPERTY(BlueprintAssignable)
 	FUtilityTaskEvent OnAnyTaskExit;
+	UPROPERTY(BlueprintAssignable) FUtilityTaskEvent OnTaskBegin;
+	UPROPERTY(BlueprintAssignable) FRAITaskEndEvent OnTaskEnd;
+	UPROPERTY(BlueprintAssignable) FRAIArbitrationEvent OnArbitration;
+	UPROPERTY(BlueprintAssignable) FRAIInvokeRejectedEvent OnInvokeRejected;
+	UPROPERTY(BlueprintAssignable) FRAILoopEvent OnLoopDetected;
+	UPROPERTY(BlueprintAssignable) FRAIReevaluationEvent OnReevaluationRequested;
+	UPROPERTY(BlueprintAssignable) FRAIInvariantEvent OnInvariantViolated;
+	FRAINativeTaskBegin OnTaskBeginNative;
+	FRAINativeTaskEnd OnTaskEndNative;
+	FRAINativeArbitration OnArbitrationNative;
 
 //*************************************************************************
 //* Static references
@@ -54,6 +77,8 @@ public:
 	
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Transient, Category = "RAI|Manager")
 	ACharacter* Character = nullptr;
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Transient, Category = "RAI|Manager")
+	APawn* Pawn = nullptr;
 	
 	UPROPERTY(VisibleAnywhere, Transient, Category = Focus)
 	AActor* ControllerFocus = nullptr;
@@ -76,7 +101,17 @@ public:
 	
 	/*  Minimum value a task must score to be considered */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "RAI|Manager")
-	float TaskThreshold = 0.1f;
+	float TaskThreshold = 0.f;
+	UPROPERTY(EditAnywhere, Instanced, Category = "RAI|Manager")
+	URAIInterruptPolicy* InterruptPolicy = nullptr;
+	UPROPERTY(EditAnywhere, Category = "RAI|Manager", meta=(ClampMin="1"))
+	int32 MaxInvokeDepth = 6;
+	UPROPERTY(EditAnywhere, Category = "RAI|Compatibility", meta=(DeprecatedProperty, DeprecationMessage="Running tasks no longer need reinvocation. Prefer timers or activities."))
+	bool bLegacyReinvokeIfNotWaiting = false;
+	UPROPERTY(EditAnywhere, Category = "RAI|Debug") bool bCheckInvariants = true;
+	UPROPERTY(EditAnywhere, Category = "RAI|Debug") bool bCaptureExplanations = false;
+	UPROPERTY(EditAnywhere, Category = "RAI|Debug", meta=(ClampMin="0")) int32 TraceCapacity = 128;
+	UPROPERTY(EditAnywhere, Category = "RAI|Debug") double RunningDiagnosticSeconds = 30.0;
 
 	/* Minimum priority difference that must be overcome to interrupt a task with interruption type WaitASec */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "RAI|Manager")
@@ -134,6 +169,18 @@ public:
 	/** Broadcasts a custom trigger to all tasks. */
 	UFUNCTION(BlueprintCallable, Category = "RAI|Manager")
 	void TriggerCustomEvent(FGameplayTag Trigger, UObject* Payload);
+	UFUNCTION(BlueprintCallable, Category = "RAI|Manager") void Deinitialize();
+	UFUNCTION(BlueprintCallable, Category = "RAI|Manager") void RequestReevaluation(FGameplayTag Reason);
+	UFUNCTION(BlueprintPure, Category = "RAI|Manager") TArray<FRAITraceRecord> GetTrace() const;
+	UFUNCTION(BlueprintPure, Category = "RAI|Manager") URAITaskComponent* GetActiveTask() const { return ActiveTask; }
+	const TArray<URAITaskComponent*>& GetAllTasks() const { return AllTasks; }
+	const TArray<URAITaskComponent*>& GetPrimaryTasks() const { return PrimaryTasks; }
+	bool ValidateInvariants() const;
+	void SetServices(TSharedPtr<IRAITimeSource> Time, TSharedPtr<IRAIScheduler> Scheduler);
+	double GetNow() const;
+	IRAIScheduler* GetScheduler() const { return Scheduler.Get(); }
+	void RebuildPrimaryTasks();
+	virtual void Deactivate() override;
 
 	
 //*************************************************************************
@@ -143,6 +190,12 @@ public:
 	void Initialize(ARAIController* Controller, APawn* Pawn);
 	void OnPerceptionStimulus(AActor* Actor, FAIStimulus Stimulus);
 	bool InvokeTask(TSubclassOf<URAITaskComponent> TaskClass, URAITaskComponent*  ParentInvokingTask, FRAITaskInvokeArguments& InvokeArguments);
+	ERAIInvokeResult InvokeTaskWithResult(TSubclassOf<URAITaskComponent> TaskClass, URAITaskComponent* Parent,
+		const FRAITaskInvokeArguments& Arguments, ERAIInvokeRejectReason& RejectReason);
+	void RequestTaskEnd(URAITaskComponent* Task, bool Success, float Cooldown, bool Interrupted, FGameplayTag Reason);
+	void RestartTask(URAITaskComponent* Task);
+	void RecordTrace(ERAITraceType Type, const URAITaskComponent* Task, FGameplayTag Reason = {}, float Value = 0.f,
+		const URAITaskComponent* Other = nullptr, uint8 Code = 0, bool Success = false, bool Interrupted = false);
 	void TaskEnded(URAITaskComponent* Task);
 	void ReturnToInvokingTask(URAITaskComponent* CompletedTask, URAITaskComponent* ParentTask, bool Success);
 
@@ -150,12 +203,39 @@ public:
 //* Private
 //*************************************************************************
 private:
-
-	bool AnnouncedBadTaskReturnWarning = false;
-	bool ReinvokeActiveTask = false;
+	struct FPendingEnd
+	{
+		TWeakObjectPtr<URAITaskComponent> Task;
+		bool Success;
+		float Cooldown;
+		bool Interrupted;
+		FGameplayTag Reason;
+		uint64 Generation;
+	};
+	TArray<FPendingEnd> PendingEnds;
+	TSharedPtr<IRAITimeSource> TimeSource;
+	TSharedPtr<IRAIScheduler> Scheduler;
+	mutable TMap<UClass*, URAITaskComponent*> TaskByClass;
+	UPROPERTY(Transient) TArray<FRAITraceRecord> TraceRing;
+	int32 TraceWriteIndex = 0;
+	int32 OperationDepth = 0;
+	uint64 LifecycleGeneration = 0;
+	bool bDrainingEnds = false;
+	bool bDeinitializing = false;
+	bool bUpdating = false;
+	bool bDirty = false;
+	bool bHasArbitration = false;
+	bool bForceArbitrationEvent = false;
+	TWeakObjectPtr<URAITaskComponent> LastWinner;
+	TWeakObjectPtr<URAITaskComponent> LastRoot;
+	ERAIArbitrationDecision LastDecision = ERAIArbitrationDecision::NoCandidate;
+	FRAIScheduleHandle DeferredDrain;
+	void DrainEnds();
+	void FinishEnd(const FPendingEnd& End);
+	void LeaveOperation(bool DeferDrain = false);
+	void ScheduleDrain();
 	
 	void StartTask(URAITaskComponent* Task, FRAITaskInvokeArguments InvokeArgument = FRAITaskInvokeArguments());
-	URAITaskComponent* UpdateTaskPriorities();
 	bool CheckIfTaskShouldInterrupt(const URAITaskComponent* ActiveTask, const URAITaskComponent* InterruptingTask) const;
 };
 

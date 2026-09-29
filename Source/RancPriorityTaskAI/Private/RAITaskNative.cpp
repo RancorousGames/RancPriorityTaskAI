@@ -15,8 +15,11 @@ void URAITaskNative::BeginTask_Implementation(const FRAITaskInvokeArguments& Arg
 
 void URAITaskNative::EndTask_Implementation(bool Success, float BeginAgainCooldown, bool WasInterrupted)
 {
+	if (!IsTaskActive || bDispatchingEnd) return;
+	bDispatchingEnd = true;
 	// NativeEndTask runs first so subclasses can still access live state (Character, etc.)
-	NativeEndTask(Success, WasInterrupted);
+	if (GetRunState() != ERAITaskRunState::Ending) NativeEndTask(Success, WasInterrupted);
+	bDispatchingEnd = false;
 	Super::EndTask_Implementation(Success, BeginAgainCooldown, WasInterrupted);
 }
 

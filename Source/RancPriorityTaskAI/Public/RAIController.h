@@ -26,13 +26,13 @@ class RANCPRIORITYTASKAI_API ARAIController : public AAIController
 	GENERATED_BODY()
 
 public:
-	ARAIController(const FObjectInitializer& ObjectInitializer): ManagerComponent(nullptr), AIPerceptionComponent(nullptr){}
-	ARAIController(): ManagerComponent(nullptr), AIPerceptionComponent(nullptr){}
+	ARAIController(const FObjectInitializer& ObjectInitializer = FObjectInitializer::Get());
 
 protected:
 	virtual void BeginPlay() override;
 	
 	virtual void OnPossess(APawn* InPawn) override;
+	virtual void OnUnPossess() override;
 public:
 	
 //*************************************************************************
@@ -44,8 +44,10 @@ public:
 
 	/* Whether the RAI system should handle forwarding sensory input  to tasks using the built in sensory system.
 	 * Set to false if you dont want input or want to call the manager sensory input methods yourself */
-	UPROPERTY(EditAnywhere,BlueprintReadOnly,Transient,Category = Configuration)
+	UPROPERTY(EditAnywhere,BlueprintReadOnly,Category = Configuration)
 	bool AutoHandleSensoryInput = true;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RAI|Debug")
+	bool bTraceThoughts = false;
 	
 	
 //*************************************************************************
@@ -58,7 +60,7 @@ public:
 	
 	/* An array of traced thoughts used primarily for debugging */
 	UPROPERTY(VisibleAnywhere,BlueprintReadOnly,Category = Status)
-	URAIManagerComponent* ManagerComponent;
+	URAIManagerComponent* ManagerComponent = nullptr;
 	
 //*************************************************************************
 //* Methods
@@ -139,7 +141,7 @@ public:
 private:
 	
 	UPROPERTY()
-	UAIPerceptionComponent* AIPerceptionComponent;
+	UAIPerceptionComponent* AIPerceptionComponent = nullptr;
 
 	UFUNCTION()
 	void OnPerceptionUpdated(AActor* Actor, FAIStimulus Stimulus);

@@ -1,352 +1,258 @@
 // Copyright Rancorous Games, 2024
 
 #include "RAITaskComponent.h"
-
-#include "GameplayTagContainer.h"
 #include "RAIManagerComponent.h"
 #include "RAIController.h"
+#include "RAITags.h"
 #include "RAILogCategory.h"
-#include "TimerManager.h"
-#include "Math/UnrealMathUtility.h"
 #include "Engine/World.h"
+#include "HAL/IConsoleManager.h"
 
-// Sets default values for this component's properties
-URAITaskComponent::URAITaskComponent()
-{
-	// Set this component to be initialized when the game starts, and to be ticked every frame.  You can turn these features
-	// off to improve performance if you don't need them.
-	PrimaryComponentTick.bCanEverTick = false;
-}
+static TAutoConsoleVariable<int32> CVarRAILoopPenalty(TEXT("rai.LoopPenalty"), 1,
+	TEXT("Apply temporary loop penalties (events remain enabled when disabled)."));
 
-void URAITaskComponent::Initialize_Implementation(ACharacter* _Character, ARAIController* _OwnerController)
+URAITaskComponent::URAITaskComponent() { PrimaryComponentTick.bCanEverTick = false; }
+
+void URAITaskComponent::Initialize_Implementation(ACharacter* InCharacter, ARAIController* Controller)
 {
+	Character = InCharacter;
+	OwnerController = Controller;
 	InterruptType = DefaultInterruptType;
-	Character = _Character;
-
-	// Validate configuration values.
-	if (Cooldown < 0.0f)
-	{
-		Cooldown = 0.0f;
-	}
+	Cooldown = FMath::Max(Cooldown, 0.f);
 }
 
-void URAITaskComponent::BeginTask_Implementation(const FRAITaskInvokeArguments& InvokeArguments)
+void URAITaskComponent::SetRunState(ERAITaskRunState State)
 {
-	OwnerController->TraceThought(FString("Beginning: ") + GetFName().ToString());
-	WorldTimeBegun = GetWorld()->GetTimeSeconds();
-	IsTaskActive = true;
-	IsWaiting = false;
-	NextBeginCooldown = 0.0f;
-	
-	CheckForInfLoop();
+	RunState = State;
+	IsTaskActive = State != ERAITaskRunState::Inactive;
+	IsWaiting = IsTaskActive && (bExplicitWait || ChildInvokedTask != nullptr);
+}
+
+void URAITaskComponent::RefreshWaitingState()
+{
+	if (RunState == ERAITaskRunState::Ending) return;
+	SetRunState(IsTaskActive ? (bExplicitWait || ChildInvokedTask ? ERAITaskRunState::Waiting : ERAITaskRunState::Running)
+		: ERAITaskRunState::Inactive);
+}
+
+void URAITaskComponent::ResetRuntimeState()
+{
+	++RunGeneration;
+	ParentInvokingTask = nullptr;
+	ChildInvokedTask = nullptr;
+	bExplicitWait = false;
+	SetRunState(ERAITaskRunState::Inactive);
+	InvokeArgs = {};
+	WaitTimeoutHandle.Invalidate();
+	RestartHandle.Invalidate();
+	WorldTimeBegun = WorldTimeEnd = LastActivityTime = LoopPenaltyUntil = LoopStartWorldTime = -1.0;
+	CurrentTaskLoopCount = 0;
+	Priority = 0.f;
+	NextBeginCooldown = 0.f;
+	PendingOutcomeReason = LastOutcome = LastChildOutcome = {};
+	IsOverridingInterruptionType = false;
+	bWarnedRunningWithoutWait = false;
+	InterruptType = DefaultInterruptType;
+}
+
+void URAITaskComponent::BeginTaskCore(const FRAITaskInvokeArguments& Arguments) { BeginTask(Arguments); }
+
+void URAITaskComponent::BeginTask_Implementation(const FRAITaskInvokeArguments& Arguments)
+{
+#if !UE_BUILD_SHIPPING
+	if (OwnerController && OwnerController->bTraceThoughts)
+		OwnerController->TraceThought(FString(TEXT("Beginning: ")) + GetFName().ToString());
+#endif
 }
 
 void URAITaskComponent::EndTask_Implementation(bool Success, float BeginAgainCooldown, bool WasInterrupted)
 {
-	if (DebugLoggingEnabled)
+	if (!ManagerComponent || !IsTaskActive) return;
+	const FGameplayTag Reason = PendingOutcomeReason.IsValid() ? PendingOutcomeReason
+		: FGameplayTag(WasInterrupted ? RAITags::Outcome_Interrupted : (Success ? RAITags::Outcome_Success : RAITags::Outcome_Failure));
+	PendingOutcomeReason = {};
+	ManagerComponent->RequestTaskEnd(this, Success, BeginAgainCooldown, WasInterrupted, Reason);
+}
+
+void URAITaskComponent::EndTaskWithReason(bool Success, FGameplayTag Reason, float CooldownSeconds, bool Interrupted)
+{
+	if (!IsTaskActive || (RunState == ERAITaskRunState::Ending && !Interrupted)) return;
+	if (RunState == ERAITaskRunState::Ending && ManagerComponent)
 	{
-		UE_LOG(LogRAI, Display, TEXT("Task %s ended with success %d"), *GetClass()->GetName(), Success);
+		ManagerComponent->RequestTaskEnd(this, Success, CooldownSeconds, Interrupted, Reason);
+		return;
 	}
-	
-	ManagerComponent->TaskEnded(this);
-	WorldTimeEnd = GetWorld()->GetTimeSeconds();
-	IsTaskActive = false;
-	IsWaiting = false;
-	InvokeArgs = FRAITaskInvokeArguments();
-	InterruptType = DefaultInterruptType;
-	NextBeginCooldown = BeginAgainCooldown;
+	PendingOutcomeReason = Reason;
+	EndTask(Success, CooldownSeconds, Interrupted);
+}
 
-	if (ParentInvokingTask != nullptr)
-	{
-		ParentInvokingTask->IsWaiting = false;
-		auto* CurrentParentInvokingTask = ParentInvokingTask;
-		ParentInvokingTask = nullptr;
-
-		if (!WasInterrupted)
-		{
-			CurrentParentInvokingTask->CheckForInfLoop();
-
-			ManagerComponent->ReturnToInvokingTask(this, CurrentParentInvokingTask, Success);
-		}
-	}
-
-	if (ChildInvokedTask != nullptr)
-	{
-		ChildInvokedTask->EndTask(false, 0, WasInterrupted);
-		ChildInvokedTask = nullptr;
-	}
+void URAITaskComponent::OnInvokedTaskCompletedWithReason_Implementation(bool Success, FGameplayTag Reason)
+{
+	OnInvokedTaskCompleted(Success);
 }
 
 bool URAITaskComponent::IsTaskReady()
 {
-	const bool bNoCooldownsConfigured = NextBeginCooldown <= 0.f && Cooldown <= 0.f;
-	const bool bNeverRunYet           = WorldTimeBegun <= 0.f;
-	if (bNoCooldownsConfigured || bNeverRunYet)
-	{
-		return true;
-	}
-
-	const float CurrentTime = GetWorld()->GetTimeSeconds();
-
-	if (NextBeginCooldown > 0)
-	{
-		return CurrentTime - WorldTimeBegun >= NextBeginCooldown;
-	}
-	
-	return CurrentTime - WorldTimeBegun >= Cooldown;
+	const double Now = GetNow();
+	if (Now < LoopPenaltyUntil) return false;
+	if (WorldTimeBegun < 0.0) return true;
+	if (NextBeginCooldown > 0.f && WorldTimeEnd >= 0.0 && Now - WorldTimeEnd < NextBeginCooldown) return false;
+	const double Reference = CooldownBasis == ERAICooldownBasis::EndToBegin ? WorldTimeEnd : WorldTimeBegun;
+	return Cooldown <= 0.f || Reference < 0.0 || Now - Reference >= Cooldown;
 }
 
-void URAITaskComponent::SetPriority(float NewPriority)
+void URAITaskComponent::SetPriority(float Value) { Priority = Value; }
+float URAITaskComponent::CalculatePriority_Implementation() { return 0.f; }
+float URAITaskComponent::GetPriority() const { return Priority; }
+float URAITaskComponent::GetEffectivePriority() const { return GetRootTask()->Priority; }
+double URAITaskComponent::GetNow() const
 {
-	Priority = NewPriority;
+	return ManagerComponent ? ManagerComponent->GetNow() : (GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0);
 }
-
+IRAIScheduler* URAITaskComponent::GetScheduler() const { return ManagerComponent ? ManagerComponent->GetScheduler() : nullptr; }
 
 bool URAITaskComponent::CheckForInfLoop()
 {
-	// If we get more than MaxTaskLoopCount calls within LoopCountDetectionPeriod then we call it an infinite loop
-	
-	const float Elapsed = GetWorld()->GetTimeSeconds() - LoopStartWorldTime;
-	if (LoopStartWorldTime < 0 || Elapsed > LoopCountDetectionPeriod)
+	const double Now = GetNow();
+	if (LoopStartWorldTime < 0.0 || Now - LoopStartWorldTime > LoopCountDetectionPeriod)
 	{
-		LoopStartWorldTime = GetWorld()->GetTimeSeconds();
+		LoopStartWorldTime = Now;
 		CurrentTaskLoopCount = 0;
-		return false;
 	}
-	
-	CurrentTaskLoopCount++;
-	if (CurrentTaskLoopCount >= MaxTaskLoopCount)
+	if (++CurrentTaskLoopCount < FMath::Max(MaxTaskLoopCount, 1)) return false;
+	CurrentTaskLoopCount = 0;
+	if (ManagerComponent)
 	{
-		 if (DebugLoggingEnabled)
-		 {
-			 UE_LOG(LogRAI, Warning, TEXT("Task %s Infinite loop detection"), *GetClass()->GetName());
-		 }
-		
-		if (Cooldown <= 0.f)
-		{
-			// go through each parent and set cooldown
-			URAITaskComponent* TaskToSetCooldown = this;
-			while (TaskToSetCooldown != nullptr)
-			{
-				TaskToSetCooldown->Cooldown = 1.f;
-				UE_LOG(LogRAI, Warning, TEXT("Task %s seems to be in an infinite loop, adding a cooldown to it"), *GetClass()->GetName());
-				TaskToSetCooldown = TaskToSetCooldown->ParentInvokingTask;
-			}
-
-			LoopPenaltyApplied = true;
-		}
-
-		return true;
+		ManagerComponent->RecordTrace(ERAITraceType::LoopDetected, this, {}, static_cast<float>(MaxTaskLoopCount));
+		ManagerComponent->OnLoopDetected.Broadcast(this, MaxTaskLoopCount, LoopCountDetectionPeriod);
 	}
-
-	return false;
-}
-
-void URAITaskComponent::OnPerceptionStimulus_Implementation(AActor* actor, FAIStimulus Stimulus)
-{
-}
-
-void URAITaskComponent::OnCustomTrigger_Implementation(FGameplayTag Trigger, UObject* Payload)
-{
-}
-
-float URAITaskComponent::CalculatePriority_Implementation()
-{
-	return 0.0f;
-}
-
-float URAITaskComponent::GetPriority() const
-{
-	if (!IsPrimaryTask)
+	UE_LOG(LogRAI, Error, TEXT("Task %s infinite loop detected"), *GetName());
+	if (CVarRAILoopPenalty.GetValueOnGameThread() != 0)
 	{
-		if (const URAITaskComponent* AncestorTask = GetOldestInvokingAncestor())
-		{
-			return AncestorTask->Priority;
-		}
+		for (URAITaskComponent* Task = this; Task; Task = Task->ParentInvokingTask)
+			Task->LoopPenaltyUntil = FMath::Max(Task->LoopPenaltyUntil, Now + LoopCountDetectionPeriod);
 	}
-	
-	return Priority;
-}
-
-void URAITaskComponent::BeginTaskCore(const FRAITaskInvokeArguments& InvokeArguments)
-{
-	BeginTask(InvokeArguments);
+	return true;
 }
 
 void URAITaskComponent::Restart()
 {
-	if (DebugLoggingEnabled)
+	if (!ManagerComponent || !IsTaskActive || !ManagerComponent->IsActive() || RunState == ERAITaskRunState::Ending) return;
+	if (GetNow() < LoopPenaltyUntil)
 	{
-		UE_LOG(LogRAI, Display, TEXT("Task %s restarting"), *GetClass()->GetName());
-	}
-
-	if (!OwnerController->IsRAIActive())
-	{
-		if (DebugLoggingEnabled)
+		if (IRAIScheduler* Scheduler = GetScheduler())
 		{
-			UE_LOG(LogRAI, Display, TEXT("Task %s attempted restarting but RAI had been deactivated on controller"), *GetClass()->GetName());
+			Scheduler->Cancel(RestartHandle);
+			RestartHandle = Scheduler->ScheduleOnce(this, LoopPenaltyUntil - GetNow(), [WeakThis = TWeakObjectPtr<URAITaskComponent>(this)]
+			{
+				if (URAITaskComponent* Self = WeakThis.Get()) Self->Restart();
+			});
 		}
-		
 		return;
 	}
-	
-	if (LoopPenaltyApplied || CheckForInfLoop())
+	ManagerComponent->RestartTask(this);
+}
+
+bool URAITaskComponent::InvokeTask(TSubclassOf<URAITaskComponent> TaskClass, FRAITaskInvokeArguments Arguments)
+{
+	ERAIInvokeRejectReason Reason;
+	return InvokeTaskWithResult(TaskClass, Arguments, Reason) != ERAIInvokeResult::Rejected;
+}
+
+ERAIInvokeResult URAITaskComponent::InvokeTaskWithResult(TSubclassOf<URAITaskComponent> TaskClass, FRAITaskInvokeArguments Arguments,
+	ERAIInvokeRejectReason& RejectReason)
+{
+	if (!ManagerComponent)
 	{
-		// If this task has been detected as in an infinite loop, we will respect cooldown on Restart
-		if (IsTaskReady())
-		{
-			if (DebugLoggingEnabled)
-			{
-				UE_LOG(LogRAI, Display, TEXT("Task %s delayed restart ready"), *GetClass()->GetName());
-			}
-			
-			InterruptType = LoopPenaltySavedInterruptType;
-			BeginTaskCore(InvokeArgs);
-		}
-		else
-		{
-			if (DebugLoggingEnabled)
-			{
-				UE_LOG(LogRAI, Display, TEXT("Task %s has penalty so delaying Restart"), *GetClass()->GetName());
-			}
-			
-			LoopPenaltySavedInterruptType = InterruptType;
-			GetWorld()->GetTimerManager().SetTimer(RestartTimerHandle, this, &URAITaskComponent::Restart, Cooldown, false);
-			InterruptType = ERAIInterruptionType::Never;
-		}
+		RejectReason = ERAIInvokeRejectReason::NotInitialized;
+		return ERAIInvokeResult::Rejected;
 	}
-	else
-	{
-		BeginTaskCore(InvokeArgs);
-	}
+	return ManagerComponent->InvokeTaskWithResult(TaskClass, this, Arguments, RejectReason);
 }
 
-bool URAITaskComponent::InvokeTask(TSubclassOf<URAITaskComponent> TaskClass,
-                                   FRAITaskInvokeArguments InvokeArguments)
+void URAITaskComponent::EndInvokedChild(FGameplayTag Reason)
 {
-	return ManagerComponent->InvokeTask(TaskClass, this, InvokeArguments);
+	if (ChildInvokedTask) ChildInvokedTask->EndTaskWithReason(false, Reason.IsValid() ? Reason : FGameplayTag(RAITags::Outcome_EndedByParent), 0.f, true);
 }
 
-void URAITaskComponent::TraceThought(FString Thought)
-{
-	OwnerController->TraceThought(Thought);
-}
-
-ERAIField URAITaskComponent::GetSimulationField()
-{
-	// Todo: Implement
-	return ERAIField::NearField;
-}
+void URAITaskComponent::TraceThought(FString Thought) { if (OwnerController) OwnerController->TraceThought(Thought); }
+ERAIField URAITaskComponent::GetSimulationField() { return ERAIField::NearField; }
 
 URAITaskComponent* URAITaskComponent::GetOldestInvokingAncestor() const
 {
-	URAITaskComponent* CurrentParentInvokingTask = ParentInvokingTask;
-	while(CurrentParentInvokingTask && CurrentParentInvokingTask->ParentInvokingTask != nullptr)
-	{
-		CurrentParentInvokingTask = CurrentParentInvokingTask->ParentInvokingTask;
-	}
+	return ParentInvokingTask ? GetRootTask() : nullptr;
+}
+URAITaskComponent* URAITaskComponent::GetRootTask() const
+{
+	const URAITaskComponent* Root = this;
+	while (Root->ParentInvokingTask) Root = Root->ParentInvokingTask;
+	return const_cast<URAITaskComponent*>(Root);
+}
+int32 URAITaskComponent::GetChainDepth() const
+{
+	int32 Depth = 1;
+	for (const URAITaskComponent* Parent = ParentInvokingTask; Parent; Parent = Parent->ParentInvokingTask) ++Depth;
+	return Depth;
+}
+bool URAITaskComponent::IsAncestorOf(const URAITaskComponent* Task) const
+{
+	for (const URAITaskComponent* Parent = Task ? Task->ParentInvokingTask : nullptr; Parent; Parent = Parent->ParentInvokingTask)
+		if (Parent == this) return true;
+	return false;
+}
+bool URAITaskComponent::IsDescendantOf(const URAITaskComponent* Task) const { return Task && Task->IsAncestorOf(this); }
 
-	return CurrentParentInvokingTask;
+void URAITaskComponent::BeginWaiting(double MaxWaitTime, bool OverrideType, ERAIInterruptionType WaitingType)
+{
+	if (!IsTaskActive || RunState == ERAITaskRunState::Ending) return;
+	bExplicitWait = true;
+	NotifyActivity();
+	RefreshWaitingState();
+	if (IRAIScheduler* Scheduler = GetScheduler())
+	{
+		Scheduler->Cancel(WaitTimeoutHandle);
+		if (MaxWaitTime > 0.0)
+			WaitTimeoutHandle = Scheduler->ScheduleOnce(this, MaxWaitTime, [WeakThis = TWeakObjectPtr<URAITaskComponent>(this)]
+			{
+				if (URAITaskComponent* Self = WeakThis.Get()) Self->OnWaitTimeout();
+			});
+	}
+	IsOverridingInterruptionType = OverrideType;
+	if (OverrideType) InterruptType = WaitingType;
 }
 
-void URAITaskComponent::BeginWaiting(double MaxWaitTime, bool OverrideInterruptionType, ERAIInterruptionType InterruptTypeWhileWaiting)
+void URAITaskComponent::DoneWaiting(ERAIInterruptionType ReturnType, EDoneWaitingExecutionStates& Branch)
 {
-	// Set the task to waiting state
-	IsWaiting = true;
-
-	// If a valid wait time is provided, set up a timer to end waiting
-	if (MaxWaitTime > 0.f)
-	{
-		// Assuming you have access to a World context or TimerManager
-		GetWorld()->GetTimerManager().SetTimer(WaitTimerHandle, this, &URAITaskComponent::OnWaitTimeout, MaxWaitTime, false);
-	}
-	IsOverridingInterruptionType = OverrideInterruptionType;
-	if (OverrideInterruptionType)
-	{
-		InterruptType = InterruptTypeWhileWaiting;
-	}
-}
-
-void URAITaskComponent::DoneWaiting(ERAIInterruptionType InterruptTypeToReturnTo, EDoneWaitingExecutionStates& ReturnBranch)
-{
-	const bool WasInterrupted = !IsTaskActive;
-	
-	if (DebugLoggingEnabled)
-	{
-		UE_LOG(LogRAI, Display, TEXT("Task %s done waiting"), *GetClass()->GetName());
-	}
-
-	if (WasInterrupted || !OwnerController->IsRAIActive())
-	{
-		if (DebugLoggingEnabled)
-		{
-			UE_LOG(LogRAI, Display, TEXT("Task %s was interrupted or RAI deactivated while waiting"), *GetClass()->GetName());
-		}
-		
-		ReturnBranch = EDoneWaitingExecutionStates::TaskEnded;
-	}
-	else
-	{
-		ReturnBranch = EDoneWaitingExecutionStates::Continue;
-	}
-
-	
-	if (IsWaiting)
-	{
-		// Clear the timer if it's active
-		if (WaitTimerHandle.IsValid())
-		{
-			GetWorld()->GetTimerManager().ClearTimer(WaitTimerHandle);
-		}
-
-		// Set the task to not waiting state
-		IsWaiting = false;
-
-		if (!WasInterrupted && IsOverridingInterruptionType)
-		{
-			InterruptType = InterruptTypeToReturnTo;
-		}
-	}
+	Branch = IsTaskActive && ManagerComponent && ManagerComponent->IsActive() && RunState != ERAITaskRunState::Ending
+		? EDoneWaitingExecutionStates::Continue : EDoneWaitingExecutionStates::TaskEnded;
+	if (IRAIScheduler* Scheduler = GetScheduler()) Scheduler->Cancel(WaitTimeoutHandle);
+	bExplicitWait = false;
+	if (IsTaskActive && IsOverridingInterruptionType) InterruptType = ReturnType;
+	IsOverridingInterruptionType = false;
+	NotifyActivity();
+	RefreshWaitingState();
 }
 
 void URAITaskComponent::OnWaitTimeout()
 {
-	// This function is called when the wait time exceeds MaxWaitTime
-
-	// Set the task to not waiting state
-	IsWaiting = false;
-	
-	OwnerController->TraceThought(FString::Printf(TEXT("Task %s timed out!"), *GetClass()->GetName()));
-
-	ManagerComponent->ForceInterruptActiveTask(this);
-}
-
-bool URAITaskComponent::IsAncestorOf(const URAITaskComponent* Task) const
-{
-	const URAITaskComponent *ParentTask = Task->ParentInvokingTask;
-	while (ParentTask != nullptr)
+	WaitTimeoutHandle.Invalidate();
+	if (IsTaskActive && bExplicitWait)
 	{
-		if (ParentTask == this)
-		{
-			return true;
-		}
-		ParentTask = ParentTask->ParentInvokingTask;
+		if (ManagerComponent) ManagerComponent->RecordTrace(ERAITraceType::WaitTimeout, this, RAITags::Outcome_Timeout);
+		EndTaskWithReason(false, RAITags::Outcome_Timeout);
 	}
-	
-	return false;
 }
 
-bool URAITaskComponent::IsDescendantOf(const URAITaskComponent* Task) const
+void URAITaskComponent::SetTaskEnabled(bool Enabled)
 {
-	const URAITaskComponent *ChildTask = Task->ChildInvokedTask;
-	while (ChildTask != nullptr)
+	if (IsEnabled == Enabled) return;
+	IsEnabled = Enabled;
+	if (ManagerComponent)
 	{
-		if (ChildTask == this)
-		{
-			return true;
-		}
-		ChildTask = ChildTask->ChildInvokedTask;
+		ManagerComponent->RebuildPrimaryTasks();
+		ManagerComponent->RequestReevaluation(RAITags::Reevaluate_TaskEnabledChanged);
 	}
-
-	return false;
 }
+void URAITaskComponent::NotifyActivity() { LastActivityTime = GetNow(); }
+void URAITaskComponent::OnPerceptionStimulus_Implementation(AActor* Actor, FAIStimulus Stimulus) {}
+void URAITaskComponent::OnCustomTrigger_Implementation(FGameplayTag Trigger, UObject* Payload) {}
