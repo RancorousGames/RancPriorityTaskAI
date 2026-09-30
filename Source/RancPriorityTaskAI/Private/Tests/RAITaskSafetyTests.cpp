@@ -442,7 +442,7 @@ RAI_SAFETY_TEST(FRAILoopPenaltyTest, "Cooldown.LoopPenaltyTemporary")
 
 RAI_SAFETY_TEST(FRAILoopEventTest, "Cooldown.LoopEventFired")
 {
-	FRAISafetyFixture F; auto Clock = F.UseFakeServices(); F.Root->MaxTaskLoopCount = 2;
+	FRAISafetyFixture F; auto Clock = F.UseFakeServices(); F.Root->MaxTaskLoopCount = 2; F.Manager->bAlwaysRecordTrace = true;
 	IConsoleVariable* Penalty = IConsoleManager::Get().FindConsoleVariable(TEXT("rai.LoopPenalty"));
 	const int32 Previous = Penalty->GetInt(); Penalty->Set(0);
 	AddExpectedError(TEXT("infinite loop detected"), EAutomationExpectedErrorFlags::Contains, 1);
@@ -459,7 +459,7 @@ RAI_SAFETY_TEST(FRAIDeterminismTest, "Determinism.SameInputsSameTrace")
 {
 	auto Run = []
 	{
-		FRAISafetyFixture F; auto Clock = F.UseFakeServices();
+		FRAISafetyFixture F; auto Clock = F.UseFakeServices(); F.Manager->bAlwaysRecordTrace = true;
 		F.Start(); Clock->Advance(1.0); F.InvokeChild(); F.Child->EndTask(true); F.Root->EndTask();
 		return F.Manager->GetTrace();
 	};

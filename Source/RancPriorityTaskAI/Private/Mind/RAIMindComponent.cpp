@@ -34,6 +34,7 @@ void URAIMindComponent::EndPlay(const EEndPlayReason::Type Reason)
 void URAIMindComponent::Witness(FRAILifeEvent Event)
 {
 	Event.WorldTime = TimeSource ? TimeSource->Now() : (Memory ? Memory->GetNow() : (GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0));
+	if (!Event.OriginId.IsValid()) Event.OriginId = FGuid::NewGuid();
 	OnLifeEvent.Broadcast(Event);
 }
 

@@ -106,10 +106,15 @@ void URAIMemoryComponent::EncodeEpisodic(const FRAILifeEvent& Event)
 	M.IndexTags.AppendTags(Event.ObjectTags);
 
 	Episodic.Add(MoveTemp(M));
+	NotifyChanged(ERAIMemoryChange::Encoded, 1, [this, &Event](FRAIMemoryChange& Change)
+	{
+		Change.Reason = Event.IsHearsay() ? FName(TEXT("Heard")) : FName(TEXT("Witnessed"));
+		Change.Episodes.Add(MakeRef(Episodic.Last()));
+	});
 
 	if (Algo::CountIf(Episodic, [](const FRAIEpisodicMemory& Entry) { return !Entry.bConsolidated; }) > FMath::Max(WorkingSetCap, 0))
 	{
-		ConsolidateOrForget();
+		ConsolidateOrForget(TEXT("WorkingSetCap"));
 	}
 }
 
@@ -127,13 +132,53 @@ void URAIMemoryComponent::LearnFact(FRAISemanticFact Fact, ERAIFactMergePolicy P
 		if (Existing.Subject == Fact.Subject && Existing.Predicate == Fact.Predicate)
 		{
 			if (Policy == ERAIFactMergePolicy::KeepHigherConfidence && Existing.Confidence > Fact.Confidence) return;
+			const float OldConfidence = Existing.Confidence;
 			if (Policy == ERAIFactMergePolicy::BlendConfidence)
 				Fact.Confidence = FMath::Lerp(Existing.Confidence, Fact.Confidence, FMath::Clamp(FactConfidenceBlend, 0.f, 1.f));
 			Existing = MoveTemp(Fact);
+			NotifyChanged(ERAIMemoryChange::FactLearned, 1, [&Existing, OldConfidence, Policy](FRAIMemoryChange& Change)
+			{
+				Change.Reason = Policy == ERAIFactMergePolicy::BlendConfidence ? FName(TEXT("Blended")) : FName(TEXT("Replaced"));
+				Change.FactSubject = Existing.Subject;
+				Change.FactPredicate = Existing.Predicate;
+				Change.OldConfidence = OldConfidence;
+				Change.NewConfidence = Existing.Confidence;
+			});
 			return;
 		}
 	}
 	Semantic.Add(MoveTemp(Fact));
+	NotifyChanged(ERAIMemoryChange::FactLearned, 1, [this](FRAIMemoryChange& Change)
+	{
+		Change.Reason = TEXT("New");
+		Change.FactSubject = Semantic.Last().Subject;
+		Change.FactPredicate = Semantic.Last().Predicate;
+		Change.NewConfidence = Semantic.Last().Confidence;
+	});
+}
+
+void URAIMemoryComponent::NotifyChanged(ERAIMemoryChange Kind, int32 Count, TFunctionRef<void(FRAIMemoryChange&)> Describe)
+{
+	if (Count <= 0) return;
+	++Revision;
+	if (!OnMemoryChangedNative.IsBound()) return;
+	FRAIMemoryChange Change;
+	Change.Kind = Kind;
+	Change.Count = Count;
+	Describe(Change);
+	OnMemoryChangedNative.Broadcast(Change);
+}
+
+FRAIMemoryEpisodeRef URAIMemoryComponent::MakeRef(const FRAIEpisodicMemory& Memory)
+{
+	FRAIMemoryEpisodeRef Ref;
+	Ref.Id = Memory.Id;
+	Ref.OriginId = Memory.Event.OriginId;
+	Ref.Kind = Memory.Event.Kind;
+	Ref.Action = Memory.Event.Action;
+	Ref.Actor = Memory.Event.Actor;
+	Ref.Target = Memory.Event.Target;
+	return Ref;
 }
 
 // ── Episodic Read ─────────────────────────────────────────────────────────────
@@ -268,7 +313,7 @@ TArray<FRAISemanticFact> URAIMemoryComponent::What(FGameplayTag Subject) const
 
 // ── Consolidation ─────────────────────────────────────────────────────────────
 
-void URAIMemoryComponent::ConsolidateOrForget()
+void URAIMemoryComponent::ConsolidateOrForget(FName Reason)
 {
 	const TArray<int32> Working = RankMatches([](const FRAIEpisodicMemory& M) { return !M.bConsolidated; }, 0);
 	const int32 Promote = FMath::Min(Working.Num(), FMath::Max(FMath::RoundToInt(Working.Num() * 0.25f), 10));
@@ -279,8 +324,19 @@ void URAIMemoryComponent::ConsolidateOrForget()
 	const int32 KeepWorking = FMath::Min(Working.Num() - Promote, FMath::Max(WorkingSetCap / 2, 0));
 	for (int32 Index = Promote; Index < Promote + KeepWorking; ++Index) Keep.Add(Working[Index]);
 	// Remove backwards to preserve chronological storage and never append empty episodes.
+	const bool bDescribe = OnMemoryChangedNative.IsBound();
+	TArray<FRAIMemoryEpisodeRef, TInlineAllocator<FRAIMemoryChange::MaxDescribedEpisodes>> Promoted, Removed;
+	if (bDescribe)
+		for (int32 Index = 0; Index < FMath::Min(Promote, FRAIMemoryChange::MaxDescribedEpisodes); ++Index) Promoted.Add(MakeRef(Episodic[Working[Index]]));
+	const int32 Before = Episodic.Num();
 	for (int32 Index = Episodic.Num() - 1; Index >= 0; --Index)
-		if (!Keep.Contains(Index)) Episodic.RemoveAt(Index, EAllowShrinking::No);
+	{
+		if (Keep.Contains(Index)) continue;
+		if (bDescribe && Removed.Num() < FRAIMemoryChange::MaxDescribedEpisodes) Removed.Add(MakeRef(Episodic[Index]));
+		Episodic.RemoveAt(Index, EAllowShrinking::No);
+	}
+	NotifyChanged(ERAIMemoryChange::Consolidated, Promote, [&](FRAIMemoryChange& Change) { Change.Reason = Reason; Change.Episodes.Append(Promoted); });
+	NotifyChanged(ERAIMemoryChange::Forgotten, Before - Episodic.Num(), [&](FRAIMemoryChange& Change) { Change.Reason = Reason; Change.Episodes.Append(Removed); });
 }
 
 void URAIMemoryComponent::OnConsolidationTick()
@@ -288,7 +344,7 @@ void URAIMemoryComponent::OnConsolidationTick()
 	if (Algo::CountIf(Episodic, [](const FRAIEpisodicMemory& M) { return !M.bConsolidated; }) > FMath::Max(WorkingSetCap, 0) * 0.8f
 		|| Algo::CountIf(Episodic, [](const FRAIEpisodicMemory& M) { return M.bConsolidated; }) > FMath::Max(LongTermCap, 0))
 	{
-		ConsolidateOrForget();
+		ConsolidateOrForget(TEXT("Maintenance"));
 	}
 }
 

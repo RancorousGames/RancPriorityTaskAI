@@ -18,4 +18,7 @@ namespace RAITags
 
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(Reevaluate_TaskEnabledChanged, "RAI.Reevaluate.TaskEnabledChanged", "A task was enabled or disabled");
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(Reevaluate_ChainEnded, "RAI.Reevaluate.ChainEnded", "The active chain ended");
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(Thought_Legacy, "RAI.Thought.Legacy", "Free-text debug thought");
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(Thought_Switch, "RAI.Thought.Switch", "The chain root changed");
 }

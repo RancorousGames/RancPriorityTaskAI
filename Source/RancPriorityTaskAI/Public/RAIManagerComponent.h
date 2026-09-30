@@ -109,8 +109,11 @@ public:
 	UPROPERTY(EditAnywhere, Category = "RAI|Compatibility", meta=(DeprecatedProperty, DeprecationMessage="Running tasks no longer need reinvocation. Prefer timers or activities."))
 	bool bLegacyReinvokeIfNotWaiting = false;
 	UPROPERTY(EditAnywhere, Category = "RAI|Debug") bool bCheckInvariants = true;
+	/** Forces priority explanations on. Debug consumers normally use AddExplanationDemand instead. */
 	UPROPERTY(EditAnywhere, Category = "RAI|Debug") bool bCaptureExplanations = false;
 	UPROPERTY(EditAnywhere, Category = "RAI|Debug", meta=(ClampMin="0")) int32 TraceCapacity = 128;
+	/** Forces the trace ring to record. Otherwise it records only while a consumer holds trace demand. */
+	UPROPERTY(EditAnywhere, Category = "RAI|Debug") bool bAlwaysRecordTrace = false;
 	UPROPERTY(EditAnywhere, Category = "RAI|Debug") double RunningDiagnosticSeconds = 30.0;
 
 	/* Minimum priority difference that must be overcome to interrupt a task with interruption type WaitASec */
@@ -172,6 +175,15 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "RAI|Manager") void Deinitialize();
 	UFUNCTION(BlueprintCallable, Category = "RAI|Manager") void RequestReevaluation(FGameplayTag Reason);
 	UFUNCTION(BlueprintPure, Category = "RAI|Manager") TArray<FRAITraceRecord> GetTrace() const;
+
+	/** Reference-counted request for DescribePriority terms in arbitration results (debug consumers such as MindView). */
+	void AddExplanationDemand() { ++ExplanationDemand; }
+	void RemoveExplanationDemand() { ExplanationDemand = FMath::Max(ExplanationDemand - 1, 0); }
+	bool IsCapturingExplanations() const { return bCaptureExplanations || ExplanationDemand > 0; }
+	/** Reference-counted request for the trace ring. The ring is empty and unallocated while nobody needs it. */
+	void AddTraceDemand() { ++TraceDemand; }
+	void RemoveTraceDemand() { TraceDemand = FMath::Max(TraceDemand - 1, 0); }
+	bool IsRecordingTrace() const { return TraceCapacity > 0 && (bAlwaysRecordTrace || TraceDemand > 0); }
 	UFUNCTION(BlueprintPure, Category = "RAI|Manager") URAITaskComponent* GetActiveTask() const { return ActiveTask; }
 	const TArray<URAITaskComponent*>& GetAllTasks() const { return AllTasks; }
 	const TArray<URAITaskComponent*>& GetPrimaryTasks() const { return PrimaryTasks; }
@@ -220,6 +232,8 @@ private:
 	mutable TMap<UClass*, URAITaskComponent*> TaskByClass;
 	UPROPERTY(Transient) TArray<FRAITraceRecord> TraceRing;
 	int32 TraceWriteIndex = 0;
+	int32 ExplanationDemand = 0;
+	int32 TraceDemand = 0;
 	int32 OperationDepth = 0;
 	uint64 LifecycleGeneration = 0;
 	bool bDrainingEnds = false;

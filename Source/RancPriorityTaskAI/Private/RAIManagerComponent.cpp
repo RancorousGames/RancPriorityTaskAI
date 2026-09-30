@@ -47,7 +47,6 @@ void URAIManagerComponent::Initialize(ARAIController* Controller, APawn* InPawn)
 	Controller->GetComponents<URAITaskComponent>(AllTasks, false);
 	TaskByClass.Reset();
 	TraceRing.Reset();
-	TraceRing.Reserve(FMath::Max(TraceCapacity, 0));
 	TraceWriteIndex = 0;
 	bHasArbitration = false;
 	for (URAITaskComponent* Task : AllTasks)
@@ -345,7 +344,8 @@ void URAIManagerComponent::UpdateActiveTasks()
 	Result.Time = GetNow();
 	Result.PreviousRoot = ActiveTask ? ActiveTask->GetRootTask() : nullptr;
 	float BestScore = TaskThreshold;
-	const bool Capture = OnArbitration.IsBound() || OnArbitrationNative.IsBound() || bForceArbitrationEvent || bCaptureExplanations;
+	const bool Explain = IsCapturingExplanations();
+	const bool Capture = OnArbitration.IsBound() || OnArbitrationNative.IsBound() || bForceArbitrationEvent || Explain;
 	TArray<URAITaskComponent*, TInlineAllocator<32>> Tasks;
 	Tasks.Append(PrimaryTasks);
 	for (URAITaskComponent* Task : Tasks)
@@ -361,7 +361,7 @@ void URAIManagerComponent::UpdateActiveTasks()
 			Candidate.Task = Task; Candidate.Priority = Score; Candidate.bReady = Ready;
 			Candidate.ExcludedReason = !Ready ? FName(TEXT("Cooldown")) : (Score <= TaskThreshold ? FName(TEXT("BelowThreshold")) : NAME_None);
 #if !UE_BUILD_SHIPPING
-			if (bCaptureExplanations) Task->DescribePriority(Candidate.Explanation);
+			if (Explain) Task->DescribePriority(Candidate.Explanation);
 #endif
 		}
 		if (Ready && Score > BestScore) { BestScore = Score; Result.Winner = Task; }
@@ -468,7 +468,7 @@ void URAIManagerComponent::ReturnToInvokingTask(URAITaskComponent* CompletedTask
 void URAIManagerComponent::RecordTrace(ERAITraceType Type, const URAITaskComponent* Task, FGameplayTag Reason,
 	float Value, const URAITaskComponent* Other, uint8 Code, bool Success, bool Interrupted)
 {
-	if (TraceCapacity <= 0) return;
+	if (!IsRecordingTrace()) return;
 	FRAITraceRecord Entry;
 	Entry.Time = GetNow(); Entry.Type = Type; Entry.Task = Task ? Task->GetFName() : NAME_None;
 	Entry.Other = Other ? Other->GetFName() : NAME_None; Entry.Tag = Reason; Entry.Value = Value;

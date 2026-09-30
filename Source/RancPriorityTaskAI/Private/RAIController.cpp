@@ -12,6 +12,7 @@
 #include "GameFramework/Pawn.h"
 #include "VisualLogger/VisualLogger.h"
 #include "DrawDebugHelpers.h"
+#include "RAIMindViewHooks.h"
 
 class URAITaskComponent;
 class URAIManagerComponent;
@@ -45,6 +46,9 @@ void ARAIController::BeginPlay()
 
 void ARAIController::TraceThought(FString Thought)
 {
+#if !UE_BUILD_SHIPPING
+	if (FRAIMindViewHooks::IsActive()) FRAIMindViewHooks::EmitLegacyThought(GetPawn(), Thought);
+#endif
     if (!bTraceThoughts) return;
     Thoughts.Add(Thought);
 	OnThoughtTrace.Broadcast(Thought);

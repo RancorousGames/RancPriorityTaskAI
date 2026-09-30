@@ -259,6 +259,9 @@ public:
 	UFUNCTION(BlueprintPure, Category = RAI)
 	FGameplayTag GetLastChildOutcome() const { return LastChildOutcome; }
 
+	/* Time-source time of this task's last begin (-1 if never begun). */
+	double GetTimeBegun() const { return WorldTimeBegun; }
+
 	/* 1 for a root, 2 for its child, ... */
 	UFUNCTION(BlueprintPure, Category = RAI)
 	int32 GetChainDepth() const;

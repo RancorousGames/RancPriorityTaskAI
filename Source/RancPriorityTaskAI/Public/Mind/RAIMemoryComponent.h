@@ -61,6 +61,45 @@ enum class ERAIFactMergePolicy : uint8
 	KeepHigherConfidence
 };
 
+enum class ERAIMemoryChange : uint8
+{
+	Encoded,
+	Consolidated,
+	Forgotten,
+	FactLearned
+};
+
+/** Identity of an affected episode, copied because forgotten episodes no longer exist after the change. */
+struct FRAIMemoryEpisodeRef
+{
+	FGuid Id;
+	FGuid OriginId;
+	FGameplayTag Kind;
+	FGameplayTag Action;
+	TWeakObjectPtr<AActor> Actor;
+	TWeakObjectPtr<AActor> Target;
+};
+
+/** One storage change, described for debug views. Built only while a listener is bound. */
+struct FRAIMemoryChange
+{
+	ERAIMemoryChange Kind = ERAIMemoryChange::Encoded;
+	int32 Count = 0;
+	/** Why it happened: Witnessed/Heard for encodes, WorkingSetCap/Maintenance for consolidation, New/Blended/Replaced for facts. */
+	FName Reason;
+	/** Up to MaxDescribedEpisodes affected episodes. */
+	TArray<FRAIMemoryEpisodeRef, TInlineAllocator<4>> Episodes;
+	FGameplayTag FactSubject;
+	FGameplayTag FactPredicate;
+	/** -1 when the fact was not previously known. */
+	float OldConfidence = -1.f;
+	float NewConfidence = 0.f;
+
+	static constexpr int32 MaxDescribedEpisodes = 8;
+};
+
+DECLARE_MULTICAST_DELEGATE_OneParam(FRAIMemoryChangedNative, const FRAIMemoryChange&);
+
 /** Owner-agnostic episodic and semantic storage; attach alongside a mind on any actor. */
 UCLASS(ClassGroup=(RAI), meta=(BlueprintSpawnableComponent))
 class RANCPRIORITYTASKAI_API URAIMemoryComponent : public UActorComponent
@@ -155,6 +194,10 @@ public:
 	UFUNCTION(BlueprintCallable, Category="RAI|Memory")
 	TArray<FRAISemanticFact> What(FGameplayTag Subject) const;
 
+	/** Storage changes, for debug views. Monotonic revision below changes on every notification. */
+	FRAIMemoryChangedNative OnMemoryChangedNative;
+	uint32 GetRevision() const { return Revision; }
+
 	// ── Storage (accessible for debug / serialization) ────────────────────────
 
 	UPROPERTY(VisibleAnywhere, Transient, Category="RAI|Memory")
@@ -164,8 +207,12 @@ public:
 	TArray<FRAISemanticFact>   Semantic;
 
 private:
+	uint32 Revision = 0;
+	/** Bumps the revision and, only if someone listens, builds and broadcasts the change descriptor. */
+	void NotifyChanged(ERAIMemoryChange Change, int32 Count, TFunctionRef<void(FRAIMemoryChange&)> Describe);
+	static FRAIMemoryEpisodeRef MakeRef(const FRAIEpisodicMemory& Memory);
 	bool bConsolidationPaused = false;
-	void ConsolidateOrForget();
+	void ConsolidateOrForget(FName Reason);
 
 	/** Returns 0..1 measuring how similar E is to the N most recent episodes. */
 	float SimilarityToRecentEpisodes(const FRAILifeEvent& E, int32 N = 5) const;

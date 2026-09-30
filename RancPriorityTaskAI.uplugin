@@ -25,6 +25,19 @@
                 "Linux",
                 "LinuxArm64"
             ]
+        },
+        {
+            "Name": "RancPriorityTaskAIMindView",
+            "Type": "Runtime",
+            "LoadingPhase": "Default",
+            "PlatformAllowList": [
+                "Win64",
+                "Linux",
+                "LinuxArm64"
+            ],
+            "TargetConfigurationDenyList": [
+                "Shipping"
+            ]
         }
     ],
     "Plugins": [

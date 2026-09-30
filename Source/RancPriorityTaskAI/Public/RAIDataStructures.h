@@ -113,6 +113,16 @@ enum class ERAIArbitrationDecision : uint8
 	EndedAtThreshold
 };
 
+/** Presentation tone of a debug thought (see RAI_THOUGHT). */
+UENUM(BlueprintType)
+enum class ERAIThoughtTone : uint8
+{
+	Neutral,
+	Good,
+	Bad,
+	Urgent
+};
+
 UENUM(BlueprintType)
 enum class ERAITraceType : uint8
 {

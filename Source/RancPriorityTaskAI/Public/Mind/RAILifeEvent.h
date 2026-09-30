@@ -82,6 +82,15 @@ struct RANCPRIORITYTASKAI_API FRAILifeEvent
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="RAI|Mind", meta=(ClampMin="0", ClampMax="1"))
 	float SourceCredibility = 1.f;
 
+	/**
+	 * Identity of the underlying observation. Stamped by the first Witness() and preserved when the event is relayed as
+	 * hearsay, so several reports of one observation can be recognized as the same evidence (and traced for debugging).
+	 * A producer that delivers one occurrence to several witnesses should stamp it once before fanning out; otherwise
+	 * each Witness() call mints its own id.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="RAI|Mind")
+	FGuid OriginId;
+
 	/** Filled by URAIMindComponent::Witness() — do not set manually. */
 	UPROPERTY(BlueprintReadOnly, Category="RAI|Mind")
 	double WorldTime = 0.0;
