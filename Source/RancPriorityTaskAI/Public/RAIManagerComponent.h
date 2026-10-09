@@ -161,7 +161,13 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "RAI|Manager")
 	URAITaskComponent* GetTaskByClass(TSubclassOf<URAITaskComponent> TaskClass) const;
 
-	/* Call this to update the AIs priorities and update active task if needed, typicall on tick or slow tick */
+	/** Evaluate enabled primary tasks without applying a task switch. */
+	FRAIArbitrationResult EvaluateArbitration() const;
+
+	/** Apply a previously evaluated result. The result must belong to this manager's current lifecycle. */
+	void ApplyArbitration(FRAIArbitrationResult Result);
+
+	/* Evaluate then apply in sequence; compatibility entry point for existing schedulers. */
 	UFUNCTION(BlueprintCallable, Category = "RAI|Manager")
 	void UpdateActiveTasks();
 
@@ -175,6 +181,10 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "RAI|Manager") void Deinitialize();
 	UFUNCTION(BlueprintCallable, Category = "RAI|Manager") void RequestReevaluation(FGameplayTag Reason);
 	UFUNCTION(BlueprintPure, Category = "RAI|Manager") TArray<FRAITraceRecord> GetTrace() const;
+
+	void SetCadenceClass(ERAICadenceClass InClass);
+	ERAICadenceClass GetCadenceClass() const { return CadenceClass; }
+	void SetTraceSink(IRAITraceSink* InSink) { TraceSink = InSink; }
 
 	/** Reference-counted request for DescribePriority terms in arbitration results (debug consumers such as MindView). */
 	void AddExplanationDemand() { ++ExplanationDemand; }
@@ -235,6 +245,10 @@ private:
 	int32 ExplanationDemand = 0;
 	int32 TraceDemand = 0;
 	int32 OperationDepth = 0;
+	ERAICadenceClass CadenceClass = ERAICadenceClass::Default;
+	IRAITraceSink* TraceSink = nullptr;
+	FGameplayTagContainer PendingReevaluationReasons;
+	bool bReevaluationPending = false;
 	uint64 LifecycleGeneration = 0;
 	bool bDrainingEnds = false;
 	bool bDeinitializing = false;
@@ -252,6 +266,7 @@ private:
 	void ScheduleDrain();
 	
 	void StartTask(URAITaskComponent* Task, FRAITaskInvokeArguments InvokeArgument = FRAITaskInvokeArguments());
+	bool TryHandoffActiveChain(URAITaskComponent* PreviousRoot, URAITaskComponent* NewRoot);
 	bool CheckIfTaskShouldInterrupt(const URAITaskComponent* ActiveTask, const URAITaskComponent* InterruptingTask) const;
 };
 

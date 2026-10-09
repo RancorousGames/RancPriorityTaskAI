@@ -34,6 +34,16 @@ public:
 	TFunction<void()> OnBegin;
 	TFunction<void()> OnEnd;
 	TFunction<void()> OnCompleted;
+	bool bAllowEquivalentHandoff = false;
+	TWeakObjectPtr<AActor> ExpectedAdoptTarget;
+	int32 Adoptions = 0;
+	virtual bool CanRelinquishInvokedChain(const URAITaskComponent*) const override { return bAllowEquivalentHandoff; }
+	virtual bool CanAdoptInvokedChain(const URAITaskComponent* PreviousRoot, const URAITaskComponent* DirectChild) const override
+	{
+		return bAllowEquivalentHandoff && PreviousRoot && DirectChild
+			&& DirectChild->GetInvokeArgs().TargetActor == ExpectedAdoptTarget.Get();
+	}
+	virtual void OnInvokedChainAdopted(const URAITaskComponent*, URAITaskComponent*) override { ++Adoptions; }
 	virtual float NativeCalculatePriority() override { return Score; }
 	virtual void DescribePriority(FRAIPriorityExplanation& Out) const override { Out.Add(TEXT("Constant"), Score); }
 	virtual void NativeBeginTask(const FRAITaskInvokeArguments&) override

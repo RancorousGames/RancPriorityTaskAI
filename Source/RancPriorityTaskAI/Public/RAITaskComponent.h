@@ -134,6 +134,16 @@ public:
 	/* Optional: named terms explaining the last priority, captured when the manager's bCaptureExplanations is set. */
 	virtual void DescribePriority(FRAIPriorityExplanation& Out) const {}
 
+	/** Optional game-supplied revision key for cached proposals. Zero means the consumer uses its legacy/time policy. */
+	virtual uint64 GetProposalRevisionKey() const { return 0; }
+
+	/** Explicit opt-in: this root can release its running invoked chain without invalidating its embodiment. */
+	virtual bool CanRelinquishInvokedChain(const URAITaskComponent* NewRoot) const { return false; }
+	/** Explicit opt-in: this winning root would invoke equivalent work on the same semantic target. */
+	virtual bool CanAdoptInvokedChain(const URAITaskComponent* PreviousRoot, const URAITaskComponent* DirectChild) const { return false; }
+	/** Called on the new root with the child already reparented; BeginTask is deliberately not re-run. */
+	virtual void OnInvokedChainAdopted(const URAITaskComponent* PreviousRoot, URAITaskComponent* DirectChild) {}
+
 	/*  This task's own last computed priority (0 if never computed). */
 	UFUNCTION(BlueprintCallable, Category = RAI)
 	float GetPriority() const;

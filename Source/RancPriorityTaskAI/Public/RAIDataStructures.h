@@ -110,7 +110,9 @@ enum class ERAIArbitrationDecision : uint8
 	/** The active chain was ended and the winner started as a new root. */
 	Interrupted,
 	/** The active chain's root dropped to or below TaskThreshold with InterruptIfReachesZero set, and was ended. */
-	EndedAtThreshold
+	EndedAtThreshold,
+	/** Ownership moved to an equivalent root; the invoked child chain kept running. */
+	Relabeled
 };
 
 /** Presentation tone of a debug thought (see RAI_THOUGHT). */
@@ -134,7 +136,10 @@ enum class ERAITraceType : uint8
 	LoopDetected,
 	Arbitration,
 	ReevaluationRequested,
-	InvariantViolated
+	InvariantViolated,
+	ChainHandoff,
+	/** Game-side named method appraisal (chosen and runner-up) in the TS33 journal. */
+	MethodChosen
 };
 
 /** One entry in the manager's bounded trace ring. Allocation-free to record. */
@@ -185,6 +190,14 @@ struct RANCPRIORITYTASKAI_API FRAITraceRecord
 	bool operator!=(const FRAITraceRecord& Rhs) const { return !(*this == Rhs); }
 };
 
+/** Allocation-free native trace sink. The caller owns the sink and must detach it before destruction. */
+class RANCPRIORITYTASKAI_API IRAITraceSink
+{
+public:
+	virtual ~IRAITraceSink() = default;
+	virtual void OnRAITraceRecord(const UObject* Source, const FRAITraceRecord& Record) = 0;
+};
+
 /** A named contribution to a task's priority, for debugging (R8). */
 USTRUCT(BlueprintType)
 struct RANCPRIORITYTASKAI_API FRAIPriorityTerm
@@ -193,6 +206,10 @@ struct RANCPRIORITYTASKAI_API FRAIPriorityTerm
 
 	UPROPERTY(BlueprintReadOnly, Category = "RAI|Arbitration")
 	FName Name;
+
+	/** Optional semantic explanation group. The plugin groups terms but never caps/saturates them. */
+	UPROPERTY(BlueprintReadOnly, Category = "RAI|Arbitration")
+	FName Group;
 
 	UPROPERTY(BlueprintReadOnly, Category = "RAI|Arbitration")
 	float Value = 0.f;
@@ -206,10 +223,11 @@ struct RANCPRIORITYTASKAI_API FRAIPriorityExplanation
 	UPROPERTY(BlueprintReadOnly, Category = "RAI|Arbitration")
 	TArray<FRAIPriorityTerm> Terms;
 
-	void Add(FName Name, float Value)
+	void Add(FName Name, float Value, FName Group = NAME_None)
 	{
 		FRAIPriorityTerm& Term = Terms.AddDefaulted_GetRef();
 		Term.Name = Name;
+		Term.Group = Group;
 		Term.Value = Value;
 	}
 };

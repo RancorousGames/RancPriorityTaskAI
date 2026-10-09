@@ -10,6 +10,15 @@
 class UObject;
 class UWorld;
 
+/** Generic scheduler grouping hint. Games map their mind profiles onto these classes. */
+enum class ERAICadenceClass : uint8
+{
+	Default,
+	HighFrequency,
+	LowFrequency,
+	Dormant
+};
+
 /**
  * Time source used by every plugin decision path (task timing, cooldowns, loop detection, memory decay).
  * The default reads world time. Games can inject simulation time; tests inject a fake clock.
@@ -51,6 +60,9 @@ public:
 
 	/** Cancel every pending callback owned by Owner. */
 	virtual void CancelAll(const UObject* Owner) = 0;
+
+	/** Optional grouping hint for budgeted external schedulers. Default schedulers may ignore it. */
+	virtual void SetOwnerCadenceClass(const UObject* Owner, ERAICadenceClass CadenceClass) {}
 };
 
 /** Default time source: world time (UWorld::GetTimeSeconds) as double. Returns 0 when the world is gone. */

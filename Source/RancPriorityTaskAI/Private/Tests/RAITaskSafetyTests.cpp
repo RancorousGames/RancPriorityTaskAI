@@ -145,6 +145,105 @@ RAI_SAFETY_TEST(FRAIHigherPriorityTest, "Arbitration.HigherPriorityWins")
 	return true;
 }
 
+RAI_SAFETY_TEST(FRAIEquivalentChainTest, "Arbitration.EquivalentChainHandoff")
+{
+	FRAISafetyFixture F;
+	F.Grandchild->IsPrimaryTask = true;
+	F.Grandchild->Score = 0.f;
+	F.Controller->UnPossess();
+	F.Controller->Possess(F.World->SpawnActor<ACharacter>());
+	F.Root->bAllowEquivalentHandoff = true;
+	F.Grandchild->bAllowEquivalentHandoff = true;
+	F.Start();
+
+	ACharacter* Target = F.World->SpawnActor<ACharacter>();
+	FRAITaskInvokeArguments Args;
+	Args.TargetActor = Target;
+	TestTrue(TEXT("invoked method starts"), F.Root->InvokeTask(URAITestChild::StaticClass(), Args));
+	F.Child->BeginWaiting();
+	const double MethodStart = F.Child->GetTimeBegun();
+	F.Grandchild->ExpectedAdoptTarget = Target;
+	F.Grandchild->Score = 100.f;
+	F.Manager->UpdateActiveTasks();
+
+	TestTrue(TEXT("new root owns the same running method"), F.Child->GetRootTask() == F.Grandchild);
+	TestTrue(TEXT("manager still tracks the method"), F.Manager->ActiveTask == F.Child);
+	TestTrue(TEXT("method was not restarted"), F.Child->Begins == 1 && F.Child->Ends == 0);
+	TestEqual(TEXT("method retained its start time"), F.Child->GetTimeBegun(), MethodStart);
+	TestEqual(TEXT("old root ended once"), F.Root->Ends, 1);
+	TestEqual(TEXT("new root adopted without BeginTask"), F.Grandchild->Adoptions, 1);
+	TestEqual(TEXT("new root did not restart"), F.Grandchild->Begins, 0);
+	F.Child->EndTask(true);
+	F.Tick();
+	TestEqual(TEXT("completion delivered to adopted root"), F.Grandchild->Completions, 1);
+	TestEqual(TEXT("old root did not receive method completion"), F.Root->Completions, 0);
+	return true;
+}
+
+RAI_SAFETY_TEST(FRAIEquivalentZeroPriorityHandoffTest, "Arbitration.EquivalentZeroPriorityHandoff")
+{
+	FRAISafetyFixture F;
+	F.Grandchild->IsPrimaryTask = true;
+	F.Grandchild->Score = 0.f;
+	F.Controller->UnPossess();
+	F.Controller->Possess(F.World->SpawnActor<ACharacter>());
+	F.Root->bAllowEquivalentHandoff = true;
+	F.Grandchild->bAllowEquivalentHandoff = true;
+	F.Start();
+
+	ACharacter* Target = F.World->SpawnActor<ACharacter>();
+	FRAITaskInvokeArguments Args;
+	Args.TargetActor = Target;
+	TestTrue(TEXT("running method starts"), F.Root->InvokeTask(URAITestChild::StaticClass(), Args));
+	F.Child->BeginWaiting();
+	const double BegunAt = F.Child->GetTimeBegun();
+
+	// The old purpose's pressure has expired, but the winning one wants the same method/target.
+	F.Root->Score = 0.f;
+	F.Grandchild->ExpectedAdoptTarget = Target;
+	F.Grandchild->Score = 100.f;
+	F.Manager->UpdateActiveTasks();
+
+	TestTrue(TEXT("method survives the old root reaching zero"), F.Child->IsTaskActive
+		&& F.Child->GetRootTask() == F.Grandchild && F.Manager->ActiveTask == F.Child);
+	TestEqual(TEXT("method was not restarted"), F.Child->Begins, 1);
+	TestEqual(TEXT("method was not ended"), F.Child->Ends, 0);
+	TestEqual(TEXT("method start time survived"), F.Child->GetTimeBegun(), BegunAt);
+	TestEqual(TEXT("new root adopted once"), F.Grandchild->Adoptions, 1);
+	F.Child->EndTask(true);
+	F.Tick();
+	TestEqual(TEXT("completion goes to new root"), F.Grandchild->Completions, 1);
+	return true;
+}
+
+RAI_SAFETY_TEST(FRAIEquivalentTargetMismatchTest, "Arbitration.EquivalentTargetMismatchInterrupts")
+{
+	FRAISafetyFixture F;
+	F.Grandchild->IsPrimaryTask = true;
+	F.Grandchild->Score = 0.f;
+	F.Controller->UnPossess();
+	F.Controller->Possess(F.World->SpawnActor<ACharacter>());
+	F.Root->bAllowEquivalentHandoff = true;
+	F.Grandchild->bAllowEquivalentHandoff = true;
+	F.Start();
+
+	ACharacter* ActualTarget = F.World->SpawnActor<ACharacter>();
+	ACharacter* DifferentTarget = F.World->SpawnActor<ACharacter>();
+	FRAITaskInvokeArguments Args;
+	Args.TargetActor = ActualTarget;
+	TestTrue(TEXT("invoked method starts"), F.Root->InvokeTask(URAITestChild::StaticClass(), Args));
+	F.Child->BeginWaiting();
+	F.Grandchild->ExpectedAdoptTarget = DifferentTarget;
+	F.Grandchild->Score = 100.f;
+	F.Manager->UpdateActiveTasks();
+
+	TestEqual(TEXT("mismatched target cannot be adopted"), F.Grandchild->Adoptions, 0);
+	TestEqual(TEXT("old method was interrupted"), F.Child->Ends, 1);
+	TestTrue(TEXT("ordinary winner began"), F.Grandchild->IsTaskActive && F.Grandchild->Begins == 1);
+	TestTrue(TEXT("new root owns no old child"), F.Grandchild->GetInvokedChild() == nullptr);
+	return true;
+}
+
 RAI_SAFETY_TEST(FRAIReturnTest, "Invoke.ReturnsToParentOnSuccess")
 {
 	FRAISafetyFixture F;

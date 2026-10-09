@@ -26,6 +26,13 @@ void URAIManagerComponent::SetServices(TSharedPtr<IRAITimeSource> Time, TSharedP
 	Deinitialize();
 	TimeSource = MoveTemp(Time);
 	Scheduler = MoveTemp(InScheduler);
+	if (Scheduler) Scheduler->SetOwnerCadenceClass(this, CadenceClass);
+}
+
+void URAIManagerComponent::SetCadenceClass(ERAICadenceClass InClass)
+{
+	CadenceClass = InClass;
+	if (Scheduler) Scheduler->SetOwnerCadenceClass(this, CadenceClass);
 }
 
 double URAIManagerComponent::GetNow() const
@@ -43,6 +50,7 @@ void URAIManagerComponent::Initialize(ARAIController* Controller, APawn* InPawn)
 	Character = Cast<ACharacter>(InPawn);
 	if (!TimeSource) TimeSource = MakeShared<FRAIWorldTimeSource>(GetWorld());
 	if (!Scheduler) Scheduler = MakeShared<FRAITimerManagerScheduler>(GetWorld());
+	if (Scheduler) Scheduler->SetOwnerCadenceClass(this, CadenceClass);
 	if (!InterruptPolicy) InterruptPolicy = NewObject<URAIInterruptPolicy>(this);
 	Controller->GetComponents<URAITaskComponent>(AllTasks, false);
 	TaskByClass.Reset();
@@ -105,6 +113,8 @@ void URAIManagerComponent::Deinitialize()
 	AllTasks.Reset();
 	PrimaryTasks.Reset();
 	TaskByClass.Reset();
+	PendingReevaluationReasons.Reset();
+	bReevaluationPending = false;
 	bDirty = false;
 }
 
@@ -143,7 +153,10 @@ URAITaskComponent* URAIManagerComponent::GetTaskByClass(TSubclassOf<URAITaskComp
 void URAIManagerComponent::RequestReevaluation(FGameplayTag Reason)
 {
 	bDirty = true;
+	if (Reason.IsValid()) PendingReevaluationReasons.AddTag(Reason);
 	RecordTrace(ERAITraceType::ReevaluationRequested, nullptr, Reason);
+	if (bReevaluationPending) return;
+	bReevaluationPending = true;
 	OnReevaluationRequested.Broadcast(Reason);
 }
 
@@ -332,47 +345,134 @@ void URAIManagerComponent::RestartTask(URAITaskComponent* Task)
 	LeaveOperation(Outermost);
 }
 
-void URAIManagerComponent::UpdateActiveTasks()
+FRAIArbitrationResult URAIManagerComponent::EvaluateArbitration() const
+{
+	FRAIArbitrationResult Result;
+	Result.Time = GetNow();
+	Result.PreviousRoot = ActiveTask ? ActiveTask->GetRootTask() : nullptr;
+	if (!IsActive() || !OwningController || !Pawn || !OwningController->HasAuthority() || bDeinitializing) return Result;
+
+	const uint64 Generation = LifecycleGeneration;
+	float BestScore = TaskThreshold;
+	const bool Explain = IsCapturingExplanations();
+	Result.Candidates.Reserve(PrimaryTasks.Num());
+	for (URAITaskComponent* Task : PrimaryTasks)
+	{
+		if (!Task || Task->ManagerComponent != this || !Task->IsEnabled) continue;
+		const float Score = Task->CalculatePriority();
+		if (LifecycleGeneration != Generation || Task->ManagerComponent != this || !OwningController || !IsActive())
+		{
+			Result.Candidates.Reset();
+			Result.Winner = nullptr;
+			return Result;
+		}
+		const bool Ready = Task->IsTaskActive || Task->IsTaskReady();
+		FRAIArbitrationCandidate& Candidate = Result.Candidates.AddDefaulted_GetRef();
+		Candidate.Task = Task;
+		Candidate.Priority = Score;
+		Candidate.bReady = Ready;
+		Candidate.ExcludedReason = !Ready ? FName(TEXT("Cooldown"))
+			: (Score <= TaskThreshold ? FName(TEXT("BelowThreshold")) : NAME_None);
+#if !UE_BUILD_SHIPPING
+		if (Explain) Task->DescribePriority(Candidate.Explanation);
+#endif
+		if (Ready && Score > BestScore)
+		{
+			BestScore = Score;
+			Result.Winner = Task;
+		}
+	}
+	Result.Candidates.StableSort([](const FRAIArbitrationCandidate& A, const FRAIArbitrationCandidate& B)
+	{
+		return A.Priority > B.Priority;
+	});
+	return Result;
+}
+
+bool URAIManagerComponent::TryHandoffActiveChain(URAITaskComponent* PreviousRoot, URAITaskComponent* NewRoot)
+{
+	// This is deliberately opt-in on BOTH roots. A game must check method + semantic target
+	// equivalence, and the old root must be able to relinquish bookkeeping without ending embodiment.
+	if (!PreviousRoot || !NewRoot || PreviousRoot == NewRoot || bDeinitializing
+		|| PreviousRoot->ManagerComponent != this || NewRoot->ManagerComponent != this
+		|| !PreviousRoot->IsTaskActive || NewRoot->IsTaskActive) return false;
+	URAITaskComponent* Child = PreviousRoot->ChildInvokedTask;
+	if (!Child || Child->ManagerComponent != this || !Child->IsTaskActive
+		|| Child->RunState == ERAITaskRunState::Ending || Child->ParentInvokingTask != PreviousRoot) return false;
+
+	const uint64 PreviousGeneration = PreviousRoot->RunGeneration;
+	if (!PreviousRoot->CanRelinquishInvokedChain(NewRoot)
+		|| !NewRoot->CanAdoptInvokedChain(PreviousRoot, Child)) return false;
+	// A hook may inspect arbitrary game state; revalidate ownership before touching the chain.
+	if (PreviousRoot->RunGeneration != PreviousGeneration || PreviousRoot->ChildInvokedTask != Child
+		|| !PreviousRoot->IsTaskActive || NewRoot->IsTaskActive || Child->ParentInvokingTask != PreviousRoot
+		|| !Child->IsTaskActive || Child->RunState == ERAITaskRunState::Ending) return false;
+
+	NewRoot->InvokeArgs = {};
+	NewRoot->WorldTimeBegun = GetNow();
+	NewRoot->LastActivityTime = NewRoot->WorldTimeBegun;
+	NewRoot->NextBeginCooldown = 0.f;
+	NewRoot->bExplicitWait = false;
+	NewRoot->bWarnedRunningWithoutWait = false;
+	NewRoot->SetRunState(ERAITaskRunState::Running);
+	++NewRoot->RunGeneration;
+
+	// Reparent the entire running subtree. Its run generations, waits, movement and method callbacks survive.
+	PreviousRoot->ChildInvokedTask = nullptr;
+	Child->ParentInvokingTask = NewRoot;
+	NewRoot->ChildInvokedTask = Child;
+	NewRoot->RefreshWaitingState();
+	PreviousRoot->EndTaskWithReason(false, RAITags::Outcome_Replaced, 0.f, true);
+
+	if (NewRoot->ManagerComponent == this && NewRoot->IsTaskActive
+		&& Child->ParentInvokingTask == NewRoot && Child->IsTaskActive)
+	{
+		RecordTrace(ERAITraceType::ChainHandoff, NewRoot, {}, 0.f, PreviousRoot);
+		OnAnyTaskEnter.Broadcast(NewRoot);
+		OnTaskBegin.Broadcast(NewRoot);
+		OnTaskBeginNative.Broadcast(NewRoot);
+		if (NewRoot->IsTaskActive && Child->ParentInvokingTask == NewRoot)
+			NewRoot->OnInvokedChainAdopted(PreviousRoot, Child);
+	}
+	return true;
+}
+
+void URAIManagerComponent::ApplyArbitration(FRAIArbitrationResult Result)
 {
 	if (!IsActive() || !OwningController || !Pawn || !OwningController->HasAuthority() || bDeinitializing || bUpdating) return;
+	const URAITaskComponent* CurrentRoot = ActiveTask ? ActiveTask->GetRootTask() : nullptr;
+	if (Result.PreviousRoot != CurrentRoot) return;
+
 	bUpdating = true;
 	++OperationDepth;
 	ON_SCOPE_EXIT { bUpdating = false; LeaveOperation(); };
 	bDirty = false;
-	const uint64 Generation = LifecycleGeneration;
-	FRAIArbitrationResult Result;
-	Result.Time = GetNow();
-	Result.PreviousRoot = ActiveTask ? ActiveTask->GetRootTask() : nullptr;
-	float BestScore = TaskThreshold;
-	const bool Explain = IsCapturingExplanations();
-	const bool Capture = OnArbitration.IsBound() || OnArbitrationNative.IsBound() || bForceArbitrationEvent || Explain;
-	TArray<URAITaskComponent*, TInlineAllocator<32>> Tasks;
-	Tasks.Append(PrimaryTasks);
-	for (URAITaskComponent* Task : Tasks)
+	bReevaluationPending = false;
+	PendingReevaluationReasons.Reset();
+
+	for (const FRAIArbitrationCandidate& Candidate : Result.Candidates)
 	{
-		if (!Task || Task->ManagerComponent != this || !Task->IsEnabled) continue;
-		const float Score = Task->CalculatePriority();
-		if (LifecycleGeneration != Generation || Task->ManagerComponent != this || !OwningController || !IsActive()) return;
-		Task->SetPriority(Score);
-		const bool Ready = Task->IsTaskActive || Task->IsTaskReady();
-		if (Capture)
-		{
-			FRAIArbitrationCandidate& Candidate = Result.Candidates.AddDefaulted_GetRef();
-			Candidate.Task = Task; Candidate.Priority = Score; Candidate.bReady = Ready;
-			Candidate.ExcludedReason = !Ready ? FName(TEXT("Cooldown")) : (Score <= TaskThreshold ? FName(TEXT("BelowThreshold")) : NAME_None);
-#if !UE_BUILD_SHIPPING
-			if (Explain) Task->DescribePriority(Candidate.Explanation);
-#endif
-		}
-		if (Ready && Score > BestScore) { BestScore = Score; Result.Winner = Task; }
+		if (Candidate.Task && Candidate.Task->ManagerComponent == this)
+			Candidate.Task->SetPriority(Candidate.Priority);
 	}
+
 	URAITaskComponent* Root = ActiveTask ? ActiveTask->GetRootTask() : nullptr;
 	if (Root && Root->InterruptIfReachesZero && Root->GetPriority() <= TaskThreshold)
 	{
-		Root->EndTaskWithReason(false, RAITags::Outcome_PriorityZero, 0.f, true);
-		Result.Decision = ERAIArbitrationDecision::EndedAtThreshold;
+		// An expired root may still be performing a method that the new winning
+		// purpose would continue. Preserve that embodiment before ending at zero.
+		if (Result.Winner && Result.Winner != Root && TryHandoffActiveChain(Root, Result.Winner))
+		{
+			Result.Decision = ERAIArbitrationDecision::Relabeled;
+		}
+		else
+		{
+			Root->EndTaskWithReason(false, RAITags::Outcome_PriorityZero, 0.f, true);
+			Result.Decision = ERAIArbitrationDecision::EndedAtThreshold;
+		}
 	}
 	if (!OwningController || !IsActive()) return;
+
 	URAITaskComponent* Winner = Result.Winner;
 	Root = ActiveTask ? ActiveTask->GetRootTask() : nullptr;
 	if (Winner)
@@ -380,27 +480,46 @@ void URAIManagerComponent::UpdateActiveTasks()
 		if (!ActiveTask)
 		{
 			StartTask(Winner);
-			if (Result.Decision != ERAIArbitrationDecision::EndedAtThreshold) Result.Decision = ERAIArbitrationDecision::StartedIdle;
+			if (Result.Decision != ERAIArbitrationDecision::EndedAtThreshold)
+				Result.Decision = ERAIArbitrationDecision::StartedIdle;
 		}
-		else if (Winner == Root) Result.Decision = ERAIArbitrationDecision::Continued;
+		else if (Winner == Root)
+		{
+			if (Result.Decision != ERAIArbitrationDecision::Relabeled)
+				Result.Decision = ERAIArbitrationDecision::Continued;
+		}
 		else if (CheckIfTaskShouldInterrupt(ActiveTask, Winner))
 		{
-			Root->EndTaskWithReason(false, RAITags::Outcome_Replaced, 0.f, true);
-			if (OwningController) OwningController->StopMovement();
-			if (!ActiveTask && Winner->ManagerComponent == this) StartTask(Winner);
-			Result.Decision = ERAIArbitrationDecision::Interrupted;
+			if (TryHandoffActiveChain(Root, Winner))
+			{
+				Result.Decision = ERAIArbitrationDecision::Relabeled;
+			}
+			else
+			{
+				Root->EndTaskWithReason(false, RAITags::Outcome_Replaced, 0.f, true);
+				if (OwningController) OwningController->StopMovement();
+				if (!ActiveTask && Winner->ManagerComponent == this) StartTask(Winner);
+				Result.Decision = ERAIArbitrationDecision::Interrupted;
+			}
 		}
-		else Result.Decision = Winner->IsTaskActive ? ERAIArbitrationDecision::Continued : ERAIArbitrationDecision::Blocked;
+		else
+		{
+			Result.Decision = Winner->IsTaskActive ? ERAIArbitrationDecision::Continued : ERAIArbitrationDecision::Blocked;
+		}
 	}
+
 	Result.ResultingRoot = ActiveTask ? ActiveTask->GetRootTask() : nullptr;
 	const bool Changed = !bHasArbitration || LastWinner.Get() != Winner || LastRoot.Get() != Result.ResultingRoot
 		|| LastDecision != Result.Decision || bForceArbitrationEvent;
-	bHasArbitration = true; bForceArbitrationEvent = false;
-	LastWinner = Winner; LastRoot = Result.ResultingRoot; LastDecision = Result.Decision;
+	bHasArbitration = true;
+	bForceArbitrationEvent = false;
+	LastWinner = Winner;
+	LastRoot = Result.ResultingRoot;
+	LastDecision = Result.Decision;
 	if (Changed)
 	{
+		const float BestScore = Winner ? Winner->GetPriority() : TaskThreshold;
 		RecordTrace(ERAITraceType::Arbitration, Winner, {}, BestScore, Result.PreviousRoot, static_cast<uint8>(Result.Decision));
-		Result.Candidates.StableSort([](const FRAIArbitrationCandidate& A, const FRAIArbitrationCandidate& B) { return A.Priority > B.Priority; });
 		OnArbitration.Broadcast(Result);
 		OnArbitrationNative.Broadcast(Result);
 	}
@@ -414,6 +533,12 @@ void URAIManagerComponent::UpdateActiveTasks()
 #endif
 	if (bLegacyReinvokeIfNotWaiting && ActiveTask && ActiveTask->RunState == ERAITaskRunState::Running)
 		RestartTask(ActiveTask);
+}
+
+void URAIManagerComponent::UpdateActiveTasks()
+{
+	if (!IsActive() || !OwningController || !Pawn || !OwningController->HasAuthority() || bDeinitializing || bUpdating) return;
+	ApplyArbitration(EvaluateArbitration());
 }
 
 bool URAIManagerComponent::CheckIfTaskShouldInterrupt(const URAITaskComponent* Active, const URAITaskComponent* Candidate) const
@@ -468,11 +593,14 @@ void URAIManagerComponent::ReturnToInvokingTask(URAITaskComponent* CompletedTask
 void URAIManagerComponent::RecordTrace(ERAITraceType Type, const URAITaskComponent* Task, FGameplayTag Reason,
 	float Value, const URAITaskComponent* Other, uint8 Code, bool Success, bool Interrupted)
 {
-	if (!IsRecordingTrace()) return;
+	const bool bKeepRing = IsRecordingTrace();
+	if (!bKeepRing && !TraceSink) return;
 	FRAITraceRecord Entry;
 	Entry.Time = GetNow(); Entry.Type = Type; Entry.Task = Task ? Task->GetFName() : NAME_None;
 	Entry.Other = Other ? Other->GetFName() : NAME_None; Entry.Tag = Reason; Entry.Value = Value;
 	Entry.Code = Code; Entry.bSuccess = Success; Entry.bInterrupted = Interrupted;
+	if (TraceSink) TraceSink->OnRAITraceRecord(this, Entry);
+	if (!bKeepRing) return;
 	if (TraceRing.Num() < TraceCapacity) TraceRing.Add(Entry);
 	else { TraceRing[TraceWriteIndex] = Entry; TraceWriteIndex = (TraceWriteIndex + 1) % TraceRing.Num(); }
 }
