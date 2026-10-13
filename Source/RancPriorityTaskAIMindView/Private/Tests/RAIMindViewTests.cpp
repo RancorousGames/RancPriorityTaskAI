@@ -9,8 +9,10 @@
 #include "RAIMindViewSession.h"
 #include "RAIMindViewSubsystem.h"
 #include "RAIMindViewTrackRule.h"
+#include "RAIInterruptPolicy.h"
 #include "RAIScheduling.h"
 #include "RAITags.h"
+#include "RAITaskComponent.h"
 #include "Mind/RAIMemoryComponent.h"
 #include "Mind/RAIMindComponent.h"
 #include "Engine/Engine.h"
@@ -488,6 +490,57 @@ RAI_MINDVIEW_TEST(FRAIMindViewMemoryLogTest, "MemoryChangeLogDescribesChanges")
 
 	F.MindView->SetDemand(F.Pawn, TEXT("Test"), FRAIMindViewDemand());
 	TestFalse(TEXT("listener released"), Memory->OnMemoryChangedNative.IsBound());
+	return true;
+}
+
+RAI_MINDVIEW_TEST(FRAIMindViewNativeProviderTest, "NativeProviderDemandOnly")
+{
+	FMindViewFixture F;
+	TestNotNull(TEXT("subsystem exists in game worlds"), F.MindView);
+	if (!F.MindView) return false;
+	const FName Id(TEXT("Test.NativeProviderDemandOnly"));
+	int32 Captures = 0;
+	FRAIMindViewSectionProvider Provider;
+	Provider.Id = Id;
+	Provider.Capture = [&Captures](const FRAIMindViewCaptureContext&, FRAIMindViewSectionData& Out) { ++Captures; Out.Revision = 1; };
+	URAIMindViewSubsystem::RegisterSectionProvider(Provider);
+	// Unregisters on every exit path, including failed assertions, so other tests never see this provider.
+	struct FProviderScope { FName ProviderId; ~FProviderScope() { URAIMindViewSubsystem::UnregisterSectionProvider(ProviderId); } } Scope{Id};
+
+	F.Arbitrate();
+	F.Tick(4);
+	TestEqual(TEXT("provider not evaluated while idle"), Captures, 0);
+	TestFalse(TEXT("no demand"), F.MindView->HasAnyDemand());
+
+	F.MindView->SetDemand(F.Pawn, TEXT("Test"), F.Demand({Id}));
+	const FRAIMindViewSnapshot Snapshot = F.Capture();
+	TestTrue(TEXT("provider evaluated under demand"), Captures > 0);
+	const FRAIMindViewSectionData* Section = Snapshot.FindSection(Id);
+	TestNotNull(TEXT("snapshot contains the native section"), Section);
+	if (Section) TestEqual(TEXT("section captured at full detail"), Section->Detail, ERAIMindViewDetail::Full);
+	F.MindView->SetDemand(F.Pawn, TEXT("Test"), FRAIMindViewDemand());
+	return true;
+}
+
+RAI_MINDVIEW_TEST(FRAIMindViewDecisionsGapTest, "DecisionsInterruptGap")
+{
+	FMindViewFixture F;
+	F.MindView->SetDemand(F.Pawn, TEXT("Test"), F.Demand({RAIMindViewSections::Decisions}));
+	F.Arbitrate();
+	const URAITaskComponent* Active = F.Manager->GetActiveTask();
+	TestTrue(TEXT("TaskA is the running task"), Active == F.TaskA);
+	if (!Active) { AddError(TEXT("no active task after arbitration")); return false; }
+	const URAITaskComponent* Root = Active->GetRootTask();
+	TestNotNull(TEXT("running root resolved"), Root);
+
+	const FRAIMindViewSnapshot Snapshot = F.Capture();
+	const FRAIMindViewDecisions* Decisions = Snapshot.GetSection<FRAIMindViewDecisions>(RAIMindViewSections::Decisions);
+	if (!Decisions || !Root) { AddError(TEXT("decisions section or root missing")); return false; }
+	TestEqual(TEXT("active root is the running root"), Decisions->ActiveRoot, Root->GetFName());
+	TestTrue(TEXT("active root priority is the root's priority"), FMath::IsNearlyEqual(Decisions->ActiveRootPriority, Root->GetPriority()));
+	TestTrue(TEXT("interrupt gap is the policy gap for the active interrupt type"),
+		FMath::IsNearlyEqual(Decisions->InterruptGap, URAIInterruptPolicy::GetPriorityGap(*F.Manager, Active->InterruptType)));
+	F.MindView->SetDemand(F.Pawn, TEXT("Test"), FRAIMindViewDemand());
 	return true;
 }
 

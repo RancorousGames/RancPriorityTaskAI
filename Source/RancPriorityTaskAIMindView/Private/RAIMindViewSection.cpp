@@ -3,6 +3,7 @@
 #include "RAIMindViewSection.h"
 
 #include "Mind/RAIMemoryComponent.h"
+#include "RAIInterruptPolicy.h"
 #include "RAIManagerComponent.h"
 #include "RAIMindViewRecorder.h"
 #include "RAITaskComponent.h"
@@ -61,9 +62,22 @@ void URAIMindViewSection_Decisions::Capture(const FRAIMindViewCaptureContext& Co
 		Data.Decision = Recorder->GetLastDecision();
 		Data.ActiveRootPriority = Recorder->GetLastActiveRootPriority();
 	}
+	if (const URAITaskComponent* Active = Manager->GetActiveTask())
+	{
+		// Live values: the friction line must match what the bars show now, not the last arbitration event.
+		if (ActiveRoot)
+		{
+			Data.ActiveRoot = ActiveRoot->GetFName();
+			Data.ActiveRootPriority = ActiveRoot->GetPriority();
+		}
+		Data.ActiveInterruptType = FName(*StaticEnum<ERAIInterruptionType>()->GetNameStringByValue(static_cast<int64>(Active->InterruptType)));
+		Data.InterruptGap = URAIInterruptPolicy::GetPriorityGap(*Manager, Active->InterruptType);
+	}
 	Data.At = Context.Now;
 
 	uint32 Revision = Mix(static_cast<uint32>(Data.Decision), Data.Candidates.Num());
+	Revision = Mix(Mix(Revision, GetTypeHash(Data.ActiveInterruptType)), Quantize(Data.InterruptGap));
+	Revision = Mix(Revision, Quantize(Data.ActiveRootPriority));
 	for (const FRAIMindViewCandidate& Candidate : Data.Candidates)
 	{
 		Revision = Mix(Revision, GetTypeHash(Candidate.Task));

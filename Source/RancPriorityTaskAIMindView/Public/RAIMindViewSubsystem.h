@@ -15,6 +15,7 @@ class URAIMindViewRecorder;
 class URAIMindViewSection;
 struct FRAIThoughtArgs;
 struct FRAIMindViewCaptureContext;
+struct FRAIMindViewSectionProvider;
 
 DECLARE_MULTICAST_DELEGATE_OneParam(FRAIMindViewSnapshotNative, const FRAIMindViewSnapshot&);
 DECLARE_MULTICAST_DELEGATE_OneParam(FRAIMindViewSubjectLostNative, FObjectKey);
@@ -34,6 +35,9 @@ public:
 	/** Game modules add section classes at startup; existing and future subsystems instantiate them. */
 	static void RegisterSectionClass(TSubclassOf<URAIMindViewSection> SectionClass);
 	static void UnregisterSectionClass(TSubclassOf<URAIMindViewSection> SectionClass);
+	/** Function-based sections (see FRAIMindViewSectionProvider). A provider with an existing id replaces it. */
+	static void RegisterSectionProvider(const FRAIMindViewSectionProvider& Provider);
+	static void UnregisterSectionProvider(FName Id);
 
 	/** A pawn with a RAI manager-driven controller, or an actor carrying a RAI memory or mind component. */
 	static bool IsSubject(const AActor* Actor);
@@ -116,4 +120,6 @@ private:
 	TMap<FRAIMindViewFactKey, FWhoKnowsCache> WhoKnowsCache;
 
 	static TArray<TSubclassOf<URAIMindViewSection>>& SectionClasses();
+	static TArray<FRAIMindViewSectionProvider>& SectionProviders();
+	void AddProviderInstance(const FRAIMindViewSectionProvider& Provider);
 };

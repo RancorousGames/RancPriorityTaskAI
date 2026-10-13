@@ -152,8 +152,17 @@ struct RANCPRIORITYTASKAIMINDVIEW_API FRAIMindViewDecisions
 	/** Highest priority first. */
 	UPROPERTY(BlueprintReadOnly, Category = "RAI|MindView") TArray<FRAIMindViewCandidate> Candidates;
 	UPROPERTY(BlueprintReadOnly, Category = "RAI|MindView") ERAIArbitrationDecision Decision = ERAIArbitrationDecision::NoCandidate;
-	/** Effective priority of the chain that was running when the decision was made (switching friction reference). */
+	/** Effective priority of the running chain (its root's latest priority); the switching friction reference. */
 	UPROPERTY(BlueprintReadOnly, Category = "RAI|MindView") float ActiveRootPriority = 0.f;
+	/** Root of the running chain; None when idle. */
+	UPROPERTY(BlueprintReadOnly, Category = "RAI|MindView") FName ActiveRoot;
+	/** Interrupt type of the deepest running task (Always, WaitASec, ...); None when idle. */
+	UPROPERTY(BlueprintReadOnly, Category = "RAI|MindView") FName ActiveInterruptType;
+	/**
+	 * Gap a challenger must exceed above ActiveRootPriority to take over under the default policy; negative when the
+	 * running task can never be interrupted. Custom interrupt policies may decide differently, so treat it as a guide.
+	 */
+	UPROPERTY(BlueprintReadOnly, Category = "RAI|MindView") float InterruptGap = 0.f;
 	UPROPERTY(BlueprintReadOnly, Category = "RAI|MindView") double At = 0.0;
 };
 

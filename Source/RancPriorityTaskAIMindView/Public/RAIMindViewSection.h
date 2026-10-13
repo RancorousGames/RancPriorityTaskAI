@@ -48,6 +48,40 @@ public:
 	virtual void OnDemandEnd(AActor* Subject) {}
 };
 
+/**
+ * A section defined by plain functions instead of a UCLASS, so game code can add sections from a module that also
+ * builds for Shipping (UHT cannot compile a UCLASS out behind a game define). Register with
+ * URAIMindViewSubsystem::RegisterSectionProvider. Capture is required; the rest are optional.
+ */
+struct RANCPRIORITYTASKAIMINDVIEW_API FRAIMindViewSectionProvider
+{
+	FName Id;
+	ERAIMindViewTruth Truth = ERAIMindViewTruth::Process;
+	TFunction<bool(const FRAIMindViewCaptureContext&)> Supports;
+	/** Fill Out.Data and Out.Revision (same contract as URAIMindViewSection::Capture). */
+	TFunction<void(const FRAIMindViewCaptureContext&, FRAIMindViewSectionData&)> Capture;
+	TFunction<uint32(const FRAIMindViewCaptureContext&)> StateRevision;
+};
+
+/** Wraps one FRAIMindViewSectionProvider. Instantiated by the subsystem; not for direct use. */
+UCLASS(Transient)
+class RANCPRIORITYTASKAIMINDVIEW_API URAIMindViewSection_Native : public URAIMindViewSection
+{
+	GENERATED_BODY()
+public:
+	void SetProvider(const FRAIMindViewSectionProvider& InProvider) { Provider = InProvider; }
+	const FRAIMindViewSectionProvider& GetProvider() const { return Provider; }
+
+	virtual FName GetSectionId() const override { return Provider.Id; }
+	virtual ERAIMindViewTruth GetTruth() const override { return Provider.Truth; }
+	virtual bool Supports(const FRAIMindViewCaptureContext& Context) const override { return !Provider.Supports || Provider.Supports(Context); }
+	virtual void Capture(const FRAIMindViewCaptureContext& Context, FRAIMindViewSectionData& Out) const override { if (Provider.Capture) Provider.Capture(Context, Out); }
+	virtual uint32 GetStateRevision(const FRAIMindViewCaptureContext& Context) const override { return Provider.StateRevision ? Provider.StateRevision(Context) : 0; }
+
+private:
+	FRAIMindViewSectionProvider Provider;
+};
+
 namespace RAIMindViewSections
 {
 	RANCPRIORITYTASKAIMINDVIEW_API extern const FName Decisions;

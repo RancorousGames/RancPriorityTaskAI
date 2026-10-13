@@ -43,6 +43,40 @@ void URAIMindViewSubsystem::UnregisterSectionClass(TSubclassOf<URAIMindViewSecti
 		It->Sections.RemoveAll([SectionClass](const URAIMindViewSection* Section) { return !Section || Section->GetClass() == SectionClass; });
 }
 
+TArray<FRAIMindViewSectionProvider>& URAIMindViewSubsystem::SectionProviders()
+{
+	static TArray<FRAIMindViewSectionProvider> Providers;
+	return Providers;
+}
+
+void URAIMindViewSubsystem::RegisterSectionProvider(const FRAIMindViewSectionProvider& Provider)
+{
+	if (Provider.Id.IsNone() || !Provider.Capture) return;
+	SectionProviders().RemoveAll([&Provider](const FRAIMindViewSectionProvider& P) { return P.Id == Provider.Id; });
+	SectionProviders().Add(Provider);
+	for (TObjectIterator<URAIMindViewSubsystem> It; It; ++It)
+		if (!It->IsTemplate() && It->IsInitialized()) It->AddProviderInstance(Provider);
+}
+
+void URAIMindViewSubsystem::UnregisterSectionProvider(FName Id)
+{
+	SectionProviders().RemoveAll([Id](const FRAIMindViewSectionProvider& P) { return P.Id == Id; });
+	for (TObjectIterator<URAIMindViewSubsystem> It; It; ++It)
+		It->Sections.RemoveAll([Id](const URAIMindViewSection* Section)
+		{
+			return !Section || (Section->IsA<URAIMindViewSection_Native>() && Section->GetSectionId() == Id);
+		});
+}
+
+void URAIMindViewSubsystem::AddProviderInstance(const FRAIMindViewSectionProvider& Provider)
+{
+	URAIMindViewSection_Native* Section = NewObject<URAIMindViewSection_Native>(this);
+	Section->SetProvider(Provider);
+	// Same replacement rule as class sections: the latest registration of an id wins.
+	Sections.RemoveAll([&Provider](const URAIMindViewSection* S) { return !S || S->GetSectionId() == Provider.Id; });
+	Sections.Add(Section);
+}
+
 bool URAIMindViewSubsystem::IsSubject(const AActor* Actor)
 {
 	return IsValid(Actor) && (ResolveManager(Actor) || ResolveMemory(Actor) || Actor->FindComponentByClass<URAIMindComponent>());
@@ -106,6 +140,7 @@ void URAIMindViewSubsystem::CreateSections()
 		URAIMindViewSection_Detectors::StaticClass(), URAIMindViewSection_Memory::StaticClass()})
 		AddSectionInstance(Class);
 	for (const TSubclassOf<URAIMindViewSection>& Class : SectionClasses()) AddSectionInstance(Class);
+	for (const FRAIMindViewSectionProvider& Provider : SectionProviders()) AddProviderInstance(Provider);
 }
 
 void URAIMindViewSubsystem::AddSectionInstance(UClass* SectionClass)
